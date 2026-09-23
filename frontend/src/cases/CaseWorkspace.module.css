@@ -1,0 +1,172 @@
+.list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.listItem {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+}
+
+.listItem a {
+  color: #0f172a;
+  text-decoration: none;
+}
+
+.listItem a:hover {
+  text-decoration: underline;
+}
+
+.meta {
+  margin-top: 0.25rem;
+  color: #475569;
+  font-size: 0.85rem;
+}
+
+.detail header {
+  margin-bottom: 1.5rem;
+}
+
+.detail h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.detail h2 {
+  font-size: 1rem;
+  margin: 1.25rem 0 0.5rem;
+  color: #334155;
+}
+
+.data {
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 0.75rem;
+  border-radius: 0.375rem;
+  overflow-x: auto;
+  font-size: 0.85rem;
+}
+
+.empty {
+  color: #64748b;
+  font-style: italic;
+}
+
+.error {
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 0.375rem;
+  padding: 0.75rem 1rem;
+}
+
+.documentUpload {
+  display: grid;
+  gap: 0.65rem;
+  max-width: 32rem;
+  padding: 0.75rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  background: #f8fafc;
+}
+
+.documentUpload label {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+  color: #334155;
+}
+
+.documentList {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.documentItem {
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+}
+
+.documentPreview {
+  margin: 0.5rem 0 0;
+  color: #475569;
+}
+
+.redacted {
+  color: #92400e;
+  font-style: italic;
+}
+
+.participantList {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.participantItem {
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+}
+
+.primaryBadge {
+  margin-left: 0.5rem;
+  color: #166534;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.transitionList {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.transitionItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+}
+
+.guard {
+  margin-top: 0.35rem;
+  color: #475569;
+  font-size: 0.85rem;
+}
+
+.history {
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: #f8fafc;
+}
+
+.history h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.95rem;
+  color: #334155;
+}
+
+.history ol {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.history li {
+  margin: 0.25rem 0;
+  font-size: 0.9rem;
+}

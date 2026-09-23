@@ -1,0 +1,133 @@
+[project]
+name = "case-management-platform"
+version = "0.1.0"
+description = "Case Management Platform — local-first, Azure-targeted, modular monolith"
+requires-python = ">=3.12,<3.13"
+readme = "README.md"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "sqlalchemy[asyncio]>=2.0.36",
+    "asyncpg>=0.30",
+    "alembic>=1.14",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "structlog>=24.4",
+    "python-multipart>=0.0.20",
+    "httpx>=0.28",
+    "typer>=0.15",
+    "uuid7>=0.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "aiosqlite>=0.20",
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+    "ruff>=0.7",
+    "mypy>=1.13",
+    "import-linter>=2.2",
+    "freezegun>=1.5",
+    "types-python-dateutil",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "N", "ASYNC", "S", "C4", "DTZ", "T20", "PT", "RET", "SIM", "TID", "ARG", "PL", "TRY"]
+ignore = ["S101", "PLR0913", "PLR2004", "TRY003", "TRY300", "ARG002"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S", "PLR", "ARG", "N802", "N803"]
+"alembic/**/*.py" = ["E", "F"]
+"app/interfaces/http/routers/**/*.py" = ["B008", "PLR0917"]
+# Operator CLI script: stdout IS the product, so `print` is the point (R6 keeps
+# library code free of prints; a one-file diagnostics tool is exempt by design).
+"dump_openapi_live.py" = ["T20"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+explicit_package_bases = true
+files = ["app/domain", "app/application"]
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+no_implicit_optional = true
+disallow_untyped_defs = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = "alembic.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "uuid_extensions.*"
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "--cov=app/domain",
+    "--cov=app/application",
+    "--cov-report=term-missing",
+    "--cov-fail-under=80",
+    "-ra",
+]
+pythonpath = ["."]
+filterwarnings = [
+    "error",
+    'ignore:Using `httpx` with `starlette\.testclient` is deprecated; install `httpx2` instead\.:starlette.exceptions.StarletteDeprecationWarning',
+    "ignore:'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated.*HTTP_422_UNPROCESSABLE_CONTENT.*:starlette.exceptions.StarletteDeprecationWarning",
+    # T051: `PublishedCaseTypeResponse.schema` intentionally keeps the wire name
+    # `schema` (frontend CreateCasePage reads `selected.schema`). It shadows
+    # the deprecated `BaseModel.schema` classmethod, which pydantic flags as a
+    # UserWarning. The field is safe: v2 serializes via `model_dump`, never the
+    # classmethod. Revisit only if the intake contract is versioned.
+    'ignore:Field name "schema" in "PublishedCaseTypeResponse" shadows an attribute.*:UserWarning',
+]
+
+[tool.coverage.run]
+source = ["app/domain", "app/application"]
+omit = ["*/tests/*", "*/__init__.py"]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+exclude_lines = ["pragma: no cover", "if TYPE_CHECKING", "raise NotImplementedError"]
+
+[tool.importlinter]
+root_package = "app"
+contract_type = "layers"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Domain layer is pure"
+type = "forbidden"
+source_modules = ["app.domain"]
+forbidden_modules = ["fastapi", "sqlalchemy", "alembic", "app.infrastructure", "app.interfaces"]
+
+[[tool.importlinter.contracts]]
+name = "Application depends only on domain"
+type = "forbidden"
+source_modules = ["app.application"]
+forbidden_modules = ["fastapi", "sqlalchemy", "alembic", "app.infrastructure", "app.interfaces"]
+
+[[tool.importlinter.contracts]]
+name = "Interfaces do not import infrastructure directly"
+type = "forbidden"
+source_modules = ["app.interfaces"]
+forbidden_modules = ["app.infrastructure"]

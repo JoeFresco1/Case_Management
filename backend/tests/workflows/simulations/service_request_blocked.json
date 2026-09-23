@@ -1,0 +1,25 @@
+{
+  "name": "service_request_blocked_by_missing_documents",
+  "workflow_key": "ServiceRequestWorkflow",
+  "description": "Forced-blocked: the synthetic case has zero participants and zero documents. The submit_for_review guard requires both, so the transition is blocked.",
+  "synthetic_case": {
+    "case": {
+      "reference": "C-TEST-2026-000002",
+      "participants": [],
+      "documents": [],
+      "priority": "normal",
+      "title": "Empty intake case"
+    }
+  },
+  "actions": [
+    {"transition_key": "submit_for_review", "payload": {}}
+  ],
+  "expected": {
+    "outcome": "blocked",
+    "initial_state": "intake",
+    "final_state": "intake",
+    "step_count": 0,
+    "blocker_kind": "guard_failed",
+    "blocker_transition": "submit_for_review"
+  }
+}

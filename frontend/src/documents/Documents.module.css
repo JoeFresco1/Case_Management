@@ -1,0 +1,134 @@
+.viewer {
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: #fff;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.modeSwitch {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.modeSwitch button[aria-pressed="true"] {
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+.pageStrip {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.thumbnail {
+  border: 1px solid #cbd5e1;
+  border-radius: 0.375rem;
+  background: #f8fafc;
+  padding: 0.5rem 0.75rem;
+  min-width: 5.5rem;
+  cursor: pointer;
+}
+
+.thumbnail[aria-pressed="true"] {
+  border-color: #0f172a;
+  background: #e2e8f0;
+}
+
+.detail {
+  border: 1px solid #e2e8f0;
+  border-radius: 0.375rem;
+  padding: 0.75rem;
+  background: #f8fafc;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.meta {
+  color: #475569;
+  font-size: 0.85rem;
+}
+
+.error {
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 0.375rem;
+  padding: 0.75rem 1rem;
+}
+
+.empty {
+  color: #64748b;
+  font-style: italic;
+}
+
+.list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.item {
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: #fff;
+}
+
+.form {
+  display: grid;
+  gap: 0.5rem;
+  max-width: 34rem;
+  padding: 0.75rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  background: #f8fafc;
+}
+
+.form label {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+  color: #334155;
+}
+
+.inlineRow {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: end;
+}
+
+.badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: 1px solid #cbd5e1;
+  border-radius: 9999px;
+  padding: 0.1rem 0.5rem;
+  margin-right: 0.35rem;
+  color: #334155;
+  background: #f1f5f9;
+}
+
+.holder {
+  font-weight: 600;
+  color: #92400e;
+}
+
+.token {
+  font-family: ui-monospace, monospace;
+  word-break: break-all;
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 0.5rem;
+  border-radius: 0.375rem;
+}

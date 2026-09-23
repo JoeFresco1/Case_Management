@@ -1,0 +1,86 @@
+name: ci
+
+on:
+  push:
+    branches: [main, "001-*"]
+  pull_request:
+    branches: [main, "001-*"]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: backend (Python 3.12)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      # sqlite test profile — no Docker required (AGENTS.md §3 Issue #3:
+      # Docker Desktop is unavailable and WSL registry is flaky).
+      APP_ENV: test
+      DATABASE_URL: sqlite+aiosqlite:///./.pytest.db
+      SYNTHETIC_ENVIRONMENT: "1"
+      # Disable background workers that are not exercised in unit tests.
+      OUTBOX_DISPATCHER_ENABLED: "0"
+      TENANT_LISTENER_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "0.12.7"
+          python-version: "3.12"
+
+      - name: Sync dependencies
+        run: uv sync --extra dev
+        env:
+          # Re-enable the listener + dispatcher for the install step so
+          # the test runtime can opt-out via env without a re-install.
+          OUTBOX_DISPATCHER_ENABLED: "1"
+          TENANT_LISTENER_ENABLED: "1"
+
+      - name: Ruff (lint + format check)
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+
+      - name: Mypy --strict (domain + application)
+        run: uv run mypy --strict app/domain app/application
+
+      - name: Import-linter (layer rules)
+        run: uv run lint-imports
+
+      - name: Portable-SQL gate (AC-009)
+        run: uv run pytest tests/foundation/test_portable_sql.py tests/foundation/test_migration_portability.py -q --no-cov
+
+      - name: Pytest + coverage
+        run: |
+          uv run alembic upgrade head
+          uv run pytest -q --cov=app/domain --cov=app/application --cov-report=term-missing
+
+  frontend:
+    name: frontend (Node 20)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build

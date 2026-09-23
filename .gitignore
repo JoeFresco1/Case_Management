@@ -1,0 +1,96 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+.eggs/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+# Local sqlite test/seed/smoke artifacts (AGENTS.md sqlite test profile)
+*.db
+*.sqlite
+*.sqlite3
+htmlcov/
+.coverage
+.coverage.*
+.full_run.log
+.full_run.err
+.tox/
+
+# Node
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+coverage/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Local data
+*.sqlite
+*.sqlite3
+/backend/documents/
+/documents/
+.env
+.env.local
+
+# Spec kit generated (keep .specify/ tracked)
+.specify/.cache/
+
+# Ralph runtime state (keep ralph/*.md, *.json, *.toml, *.sh, *.ps1 tracked)
+ralph/.ralph_state
+ralph/.ralph-pause
+ralph/.ralph-done
+ralph/.ralph_last_rebase
+ralph/activity.log
+ralph/error.log
+ralph/error.log.old
+ralph/codex_output.log
+ralph/codex_last_message.txt
+ralph/kilo_output.log
+ralph/kilo_last_message.txt
+ralph/prd.backup.json
+ralph/bulk-checkpoint.json
+ralph/progress.txt
+ralph/logs/
+ralph/PRD.json.bak
+ralph/PRD.json.old
+
+# Local Kilo configuration and runtime state
+.kilo/
+
+# Legacy orca-dag runtime artifacts (tool retired — never re-commit)
+.orca-dag.config.json
+.orca-dag.scheduler-state.json*
+.orca-dag.scheduler-journal.jsonl
+.orca-dag.owner.json
+*tmp.failed
+*.tmp
+
+# Agent/tool working artifacts (never commit)
+.codex-remote-attachments/
+.codegraph/
+.impeccable/
+impeccable/
+dag.run.json
+dag.run.d/
+dag.runs/
+dag.run.log
+dag.run.json.bak

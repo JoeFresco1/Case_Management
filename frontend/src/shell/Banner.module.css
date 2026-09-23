@@ -1,0 +1,27 @@
+.banner {
+  background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%);
+  color: #1f1b16;
+  padding: 6px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.18);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+.label {
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: rgba(0, 0, 0, 0.12);
+  padding: 2px 8px;
+  border-radius: 3px;
+}
+
+.message {
+  font-weight: 400;
+  opacity: 0.92;
+}

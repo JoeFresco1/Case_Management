@@ -1,0 +1,51 @@
+.badge {
+  display: inline-block;
+  padding: 0.125rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border: 1px solid transparent;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.levelPublic {
+  background: #e8f5e9;
+  color: #1b5e20;
+  border-color: #a5d6a7;
+}
+
+.levelInternal {
+  background: #e3f2fd;
+  color: #0d47a1;
+  border-color: #90caf9;
+}
+
+.levelConfidential {
+  background: #fff8e1;
+  color: #7b5e00;
+  border-color: #ffe082;
+}
+
+.levelRestricted {
+  background: #fce4ec;
+  color: #880e4f;
+  border-color: #f48fb1;
+}
+
+.levelPhi {
+  background: #4a148c;
+  color: #fff;
+  border-color: #2a0a52;
+}
+
+.levelUnknown {
+  background: #f5f5f5;
+  color: #666;
+  border-color: #ccc;
+}
+
+.redacted {
+  color: #880e4f;
+  font-style: italic;
+}

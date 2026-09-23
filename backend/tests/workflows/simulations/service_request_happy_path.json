@@ -1,0 +1,32 @@
+{
+  "name": "service_request_happy_path",
+  "workflow_key": "ServiceRequestWorkflow",
+  "description": "Seed workflow happy path: an intake case with one participant and one document passes the submit_for_review guard.",
+  "synthetic_case": {
+    "case": {
+      "reference": "C-TEST-2026-000001",
+      "participants": [
+        {"role": "intake", "display_name": "Iris Intake", "external_ref": "intake@example.test"}
+      ],
+      "documents": [
+        {"id": "doc-1", "classification": "Correspondence"}
+      ],
+      "priority": "normal",
+      "title": "Help with onboarding"
+    }
+  },
+  "actions": [
+    {"transition_key": "submit_for_review", "payload": {}},
+    {"transition_key": "decide", "payload": {"outcome": "approve"}},
+    {"transition_key": "close", "payload": {}}
+  ],
+  "expected": {
+    "outcome": "completed",
+    "initial_state": "intake",
+    "final_state": "closed",
+    "step_count": 3,
+    "first_transition": "submit_for_review",
+    "last_transition": "close",
+    "guard_count_for_first_step": 1
+  }
+}
