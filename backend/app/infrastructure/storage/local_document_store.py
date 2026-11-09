@@ -57,7 +57,7 @@ class LocalDocumentStore:
     """
 
     def __init__(self, *, root: Path) -> None:
-        self._root = Path(root)
+        self._root = Path(root).resolve()
 
     async def put(
         self,
@@ -103,7 +103,7 @@ class LocalDocumentStore:
         # metadata row records it verbatim so ``get`` can find the bytes
         # later. Using a relative path means the ``root`` can move
         # without breaking the metadata (e.g. container remount).
-        return str(path.relative_to(self._root))
+        return path.relative_to(self._root).as_posix()
 
     async def get(self, *, tenant_id: UUID, content_ref: str) -> bytes:
         """Read the bytes previously stored under ``content_ref``.
@@ -112,7 +112,13 @@ class LocalDocumentStore:
             DependencyUnavailable: when ``content_ref`` is malformed
                 (path traversal) or the file is missing on disk.
         """
-        path = self._resolve_path(tenant_id, content_ref)
+        # Earlier Windows uploads persisted native separators. Validate every
+        # segment before resolving so a reference cannot cross tenant roots.
+        parts = content_ref.replace("\\", "/").split("/")
+        digest = parts[-1]
+        if len(parts) > 1 and parts != [str(tenant_id), digest[:2], digest]:
+            raise DependencyUnavailable("document store ref has an invalid tenant or layout")
+        path = self._resolve_path(tenant_id, digest)
         if not path.is_file():
             raise DependencyUnavailable(f"document bytes not found: {content_ref}")
         try:

@@ -52,6 +52,6 @@ describe("TaskPage", () => {
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Task completed."));
     const post = fetchSpy.mock.calls.find(([, init]) => init?.method === "POST");
     expect(String(post?.[0])).toBe(`/api/v1/tasks/${TASK.id}/complete`);
-    expect((post?.[1]?.headers as Record<string, string>)["Idempotency-Key"]).toBeTruthy();
+    expect(new Headers(post?.[1]?.headers).get("Idempotency-Key")).toBeTruthy();
   });
 });

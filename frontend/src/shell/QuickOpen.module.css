@@ -1,0 +1,93 @@
+.launch {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  background: white;
+  border: 1px solid #d7e1ec;
+  border-radius: 7px;
+  padding: 7px 10px;
+  color: #465d77;
+  cursor: pointer;
+  font-size: 13px;
+}
+.launch kbd,
+.search button {
+  border: 1px solid #dbe3ec;
+  border-radius: 4px;
+  color: #66798c;
+  font: 11px/1.6 inherit;
+  background: #f6f8fb;
+  padding: 0 4px;
+}
+.dialog {
+  width: min(560px, 92vw);
+  position: fixed;
+  margin: 12vh auto auto;
+  border: 1px solid #b8c8d9;
+  padding: 0;
+  border-radius: 14px;
+  color: #20344c;
+  box-shadow: 0 28px 110px #10223f4d;
+}
+.dialog::backdrop {
+  background: #0f203d75;
+}
+.search {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 14px 18px;
+  border-bottom: 1px solid #dee5ef;
+}
+.search input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px;
+  border: none;
+  color: #172c46;
+}
+.results {
+  padding: 6px 10px 12px;
+  max-height: 52vh;
+  overflow: auto;
+}
+.results h2 {
+  font-size: 11px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  margin: 14px 10px 5px;
+  color: #64758a;
+}
+.results button {
+  display: flex;
+  align-items: center;
+  text-align: left;
+  width: 100%;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 0;
+  background: white;
+  color: #223855;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.results button:hover,
+.results button:focus-visible {
+  background: #edf4ff;
+}
+.results small {
+  display: block;
+  color: #66788d;
+}
+.results p {
+  padding: 12px;
+}
+.search button {
+  cursor: pointer;
+}
+@media (max-width: 950px) {
+  .launch span,
+  .launch kbd {
+    display: none;
+  }
+}

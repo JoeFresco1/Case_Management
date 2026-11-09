@@ -1,9 +1,8 @@
-import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useInfiniteQuery } from "@tanstack/react-query";
+import { useState } from "react";
 
 import { api, ApiClientError } from "../api/client";
-import type { TimelinePage } from "../api/client";
-import type { components } from "../api/types.gen";
+import styles from "./Timeline.module.css";
 
 /**
  * Per-case audit timeline (P09-US1 / US4; FM-043; FR-022).
@@ -25,7 +24,6 @@ import type { components } from "../api/types.gen";
  * The wire shapes are imported from the generated OpenAPI contract so this
  * view stays aligned with the API as the timeline evolves.
  */
-type TimelineEntry = components["schemas"]["TimelineEntryResponse"];
 
 interface TimelineFilters {
   eventTypes: string[];
@@ -37,7 +35,8 @@ interface TimelineFilters {
 const ALL_EVENT_TYPES = [
   "CaseCreated",
   "CaseUpdated",
-  "CaseTransitioned",
+  "WorkflowStarted",
+  "WorkflowTransitioned",
   "DocumentAdded",
   "DecisionRecorded",
   "TaskCreated",
@@ -70,31 +69,26 @@ export interface TimelineProps {
 export function Timeline({ caseId }: TimelineProps) {
   const [filters, setFilters] = useState<TimelineFilters>(DEFAULT_FILTERS);
   const [applied, setApplied] = useState<TimelineFilters>(DEFAULT_FILTERS);
-  const [pages, setPages] = useState<TimelineEntry[]>([]);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
-
-  const initialQuery = useQuery({
+  const timeline = useInfiniteQuery({
     queryKey: ["timeline", caseId, applied],
-    queryFn: () => api.getCaseTimeline(caseId, {
-      limit: 50,
-      event_type: applied.eventTypes,
-      actor_id: applied.actorId || undefined,
-      since: applied.since || undefined,
-      until: applied.until || undefined,
-    }),
-    enabled: !!caseId,
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) =>
+      api.getCaseTimeline(caseId, {
+        limit: 50,
+        event_type: applied.eventTypes,
+        actor_id: applied.actorId || undefined,
+        since: applied.since
+          ? new Date(applied.since).toISOString()
+          : undefined,
+        until: applied.until
+          ? new Date(applied.until).toISOString()
+          : undefined,
+        cursor: pageParam,
+      }),
+    getNextPageParam: (page) => page.next_cursor ?? undefined,
     staleTime: 15_000,
   });
-
-  // Mirror the latest query result into local pagination state so the
-  // "Load more" button can stitch pages without losing filters.
-  useEffect(() => {
-    if (initialQuery.data) {
-      setPages(initialQuery.data.items);
-      setNextCursor(initialQuery.data.next_cursor);
-    }
-  }, [initialQuery.data]);
-
+  const pages = timeline.data?.pages.flatMap((page) => page.items) ?? [];
   function toggleEventType(t: string) {
     setFilters((f) => ({
       ...f,
@@ -106,129 +100,128 @@ export function Timeline({ caseId }: TimelineProps) {
 
   function applyFilters() {
     setApplied(filters);
-    setPages([]);
-    setNextCursor(null);
-    initialQuery.refetch();
   }
 
   function clearFilters() {
     setFilters(DEFAULT_FILTERS);
     setApplied(DEFAULT_FILTERS);
-    setPages([]);
-    setNextCursor(null);
   }
 
-  async function loadMore() {
-    if (!nextCursor) return;
-    const next: TimelinePage = await api.getCaseTimeline(caseId, {
-      limit: 50,
-      event_type: applied.eventTypes,
-      actor_id: applied.actorId || undefined,
-      since: applied.since || undefined,
-      until: applied.until || undefined,
-      cursor: nextCursor,
-    });
-    setPages((prev) => [...prev, ...next.items]);
-    setNextCursor(next.next_cursor);
-  }
-
-  if (initialQuery.isLoading) return <p>Loading timeline…</p>;
-  if (initialQuery.error) {
+  if (timeline.isLoading) return <p>Loading timeline…</p>;
+  if (timeline.error && !timeline.data) {
     return (
       <p>
-        {initialQuery.error instanceof ApiClientError
-          ? initialQuery.error.message
+        {timeline.error instanceof ApiClientError
+          ? timeline.error.message
           : "Failed to load timeline."}
       </p>
     );
   }
 
   return (
-    <section data-testid="timeline">
-      <h2>Timeline</h2>
-      <fieldset>
-        <legend>Filters</legend>
-        <label>
-          Actor UUID
-          <input
-            type="text"
-            value={filters.actorId}
-            placeholder="00000000-0000-0000-0000-000000000000"
-            onChange={(e) =>
-              setFilters((f) => ({ ...f, actorId: e.target.value }))
-            }
-          />
-        </label>
-        <label>
-          Since
-          <input
-            type="datetime-local"
-            value={filters.since}
-            onChange={(e) =>
-              setFilters((f) => ({ ...f, since: e.target.value }))
-            }
-          />
-        </label>
-        <label>
-          Until
-          <input
-            type="datetime-local"
-            value={filters.until}
-            onChange={(e) =>
-              setFilters((f) => ({ ...f, until: e.target.value }))
-            }
-          />
-        </label>
+    <section data-testid="timeline" className={styles.stream}>
+      <h2>Case activity</h2>
+      <details className={styles.filters}>
+        <summary>Filter activity</summary>
         <fieldset>
-          <legend>Event types</legend>
-          {ALL_EVENT_TYPES.map((t) => (
-            <label key={t}>
-              <input
-                type="checkbox"
-                checked={filters.eventTypes.includes(t)}
-                onChange={() => toggleEventType(t)}
-              />
-              {t}
-            </label>
-          ))}
+          <legend>Filters</legend>
+          <label>
+            Actor UUID
+            <input
+              type="text"
+              value={filters.actorId}
+              placeholder="00000000-0000-0000-0000-000000000000"
+              onChange={(e) =>
+                setFilters((f) => ({ ...f, actorId: e.target.value }))
+              }
+            />
+          </label>
+          <label>
+            Since
+            <input
+              type="datetime-local"
+              value={filters.since}
+              onChange={(e) =>
+                setFilters((f) => ({ ...f, since: e.target.value }))
+              }
+            />
+          </label>
+          <label>
+            Until
+            <input
+              type="datetime-local"
+              value={filters.until}
+              onChange={(e) =>
+                setFilters((f) => ({ ...f, until: e.target.value }))
+              }
+            />
+          </label>
+          <fieldset>
+            <legend>Event types</legend>
+            {ALL_EVENT_TYPES.map((t) => (
+              <label key={t}>
+                <input
+                  type="checkbox"
+                  checked={filters.eventTypes.includes(t)}
+                  onChange={() => toggleEventType(t)}
+                />
+                {t.replace(/([a-z])([A-Z])/g, "$1 $2")}
+              </label>
+            ))}
+          </fieldset>
+          <button type="button" onClick={applyFilters}>
+            Apply
+          </button>
+          <button type="button" onClick={clearFilters}>
+            Clear
+          </button>
         </fieldset>
-        <button type="button" onClick={applyFilters}>
-          Apply
-        </button>
-        <button type="button" onClick={clearFilters}>
-          Clear
-        </button>
-      </fieldset>
-
+      </details>
       {pages.length === 0 ? (
         <p>No events match the current filters.</p>
       ) : (
         <ol data-testid="timeline-list">
           {pages.map((entry) => (
             <li key={entry.id} data-testid="timeline-entry">
-              <strong>{entry.event_type}</strong> ·{" "}
-              <span>{formatTimestamp(entry.occurred_at)}</span>
-              <div>
-                Actor: <code>{entry.actor_id}</code> ({entry.actor_type})
-              </div>
-              {entry.config_version ? (
-                <div>Config version: <code>{entry.config_version}</code></div>
-              ) : null}
-              {entry.redacted ? (
-                <div>
-                  <em>Some payload fields are redacted.</em>
-                </div>
-              ) : null}
+              <strong>
+                {entry.event_type.replace(/([a-z])([A-Z])/g, "$1 $2")}
+              </strong>{" "}
+              · <span>{formatTimestamp(entry.occurred_at)}</span>
               <details>
-                <summary>Payload</summary>
-                <pre>{JSON.stringify(entry.payload, null, 2)}</pre>
+                <summary>Event details</summary>
+                <div>
+                  Event type: <code>{entry.event_type}</code>
+                  <br />
+                  Actor: <code>{entry.actor_id}</code> ({entry.actor_type})
+                </div>
+                {entry.config_version ? (
+                  <div>
+                    Config version: <code>{entry.config_version}</code>
+                  </div>
+                ) : null}
+                {entry.redacted ? (
+                  <div>
+                    <em>Some payload fields are redacted.</em>
+                  </div>
+                ) : null}
+                <details>
+                  <summary>Event data</summary>
+                  <pre>{JSON.stringify(entry.payload, null, 2)}</pre>
+                </details>
               </details>
             </li>
           ))}
         </ol>
       )}
-      {nextCursor ? (
-        <button type="button" onClick={loadMore}>
+      {timeline.isFetchNextPageError && (
+        <p role="alert">Unable to load more activity. Try again.</p>
+      )}
+      {timeline.hasNextPage ? (
+        <button
+          type="button"
+          disabled={timeline.isFetchingNextPage}
+          onClick={() => void timeline.fetchNextPage()}
+        >
           Load more
         </button>
       ) : null}

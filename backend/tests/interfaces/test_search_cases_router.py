@@ -50,6 +50,8 @@ from app.infrastructure.persistence.search_http_dependencies import (
 )
 from app.interfaces.http.errors import domain_error_handler
 from app.interfaces.http.routers.search import router
+from app.interfaces.http.routers.search.common import _adhoc_audit_shape
+from app.interfaces.http.schemas.search import SearchFilterRequest
 
 TENANT_A = UUID("11111111-1111-1111-1111-111111111111")
 TENANT_B = UUID("22222222-2222-2222-2222-222222222222")
@@ -232,7 +234,7 @@ def test_get_cases_search__other_tenant_case__never_appears(
     rows = _run(_audit_rows(sql_session_factory, TENANT_A))
     assert len(rows) == 1
     assert rows[0].saved_search_id is None
-    assert rows[0].query_shape["text_query"] == "onboarding"
+    assert rows[0].query_shape["text_query"] == {"redacted": True, "reason": "free_text"}
     assert rows[0].result_count == 1
     assert SSN_A not in json.dumps(rows[0].query_shape)
     assert _run(_audit_rows(sql_session_factory, TENANT_B)) == []
@@ -279,7 +281,13 @@ def test_post_search__other_tenant_case__never_appears(
     assert body["total_considered"] == 1
     rows = _run(_audit_rows(sql_session_factory, TENANT_A))
     assert len(rows) == 1
-    assert rows[0].query_shape["filters"] == [{"field": "status", "op": "eq", "value": "open"}]
+    assert rows[0].query_shape["filters"] == [
+        {
+            "field": "status",
+            "op": "eq",
+            "value": {"redacted": True, "reason": "query_value"},
+        }
+    ]
     assert rows[0].result_count == 1
     assert _run(_audit_rows(sql_session_factory, TENANT_B)) == []
 
@@ -383,3 +391,29 @@ def test_search__every_execution__writes_audit_with_shape_count_and_no_phi(
     ]
     assert rows[0].result_count == body["total_considered"] == 1
     assert SSN_A not in json.dumps(shape)
+
+
+def test_adhoc_search_audit_shape__validation_fallback__redacts_values() -> None:
+    # given: a validation mismatch reaches the defensive audit fallback
+    text_value = "name@example.test"
+    filter_value = "private free-form content"
+    # when: the audit shape is projected with a non-searchable field
+    shape = _adhoc_audit_shape(
+        tenant_id=TENANT_A,
+        actor_id=INTAKE_A,
+        text_query=text_value,
+        filters=[SearchFilterRequest(field="data.internal_code", op="eq", value=filter_value)],
+        searchable_keys=(),
+        sensitive_keys=(),
+    )
+    # then: the fallback keeps shape metadata and stores no submitted values
+    assert shape["text_query"] == {"redacted": True, "reason": "free_text"}
+    assert shape["filters"] == [
+        {
+            "field": "data.internal_code",
+            "op": "eq",
+            "value": {"redacted": True, "reason": "query_value"},
+        }
+    ]
+    assert text_value not in json.dumps(shape)
+    assert filter_value not in json.dumps(shape)

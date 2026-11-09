@@ -1,8 +1,15 @@
 /**
  * Case search, saved searches, and search audit (P06 / FM-031..FM-033).
  */
-import type { CaseSearchResponse, SavedSearch, SavedSearchList, SearchAuditList, SearchFilterRequest, SortEntry } from "../types";
-import { request } from "./http";
+import type {
+  CaseSearchResponse,
+  SavedSearch,
+  SavedSearchList,
+  SearchAuditList,
+  SearchFilterRequest,
+  SortEntry,
+} from "../types";
+import { request, requestVoid } from "./http";
 
 /**
  * Structured case search (P06 / FM-031). The POST variant accepts a
@@ -22,15 +29,17 @@ export function searchCases(body: {
   });
 }
 
-export function searchCasesGet(params: {
-  query?: string;
-  status?: string;
-  priority?: string;
-  dataKey?: string;
-  dataValue?: string;
-  limit?: number;
-  offset?: number;
-} = {}): Promise<CaseSearchResponse> {
+export function searchCasesGet(
+  params: {
+    query?: string;
+    status?: string;
+    priority?: string;
+    dataKey?: string;
+    dataValue?: string;
+    limit?: number;
+    offset?: number;
+  } = {},
+): Promise<CaseSearchResponse> {
   const search = new URLSearchParams();
   if (params.query !== undefined) {
     search.set("query", params.query);
@@ -65,7 +74,9 @@ export function searchCasesGet(params: {
  * returns so the worker can drop the saved result into the same
  * UI affordance.
  */
-export function listSavedSearches(params: { limit?: number; offset?: number } = {}): Promise<SavedSearchList> {
+export function listSavedSearches(
+  params: { limit?: number; offset?: number } = {},
+): Promise<SavedSearchList> {
   const search = new URLSearchParams();
   if (params.limit !== undefined) {
     search.set("limit", String(params.limit));
@@ -89,8 +100,8 @@ export function saveSearch(body: {
   });
 }
 
-export function deleteSavedSearch(id: string): Promise<null> {
-  return request<null>(`/search/saved/${id}`, { method: "DELETE" });
+export function deleteSavedSearch(id: string): Promise<void> {
+  return requestVoid(`/search/saved/${id}`, { method: "DELETE" });
 }
 
 export function runSavedSearch(
@@ -116,14 +127,16 @@ export function runSavedSearch(
  * lives at ``/api/v1/search_audit`` (singular prefix) to mirror the
  * audit router's naming convention.
  */
-export function listSearchAudit(params: {
-  actor_id?: string;
-  saved_search_id?: string;
-  since?: string;
-  until?: string;
-  limit?: number;
-  offset?: number;
-} = {}): Promise<SearchAuditList> {
+export function listSearchAudit(
+  params: {
+    actor_id?: string;
+    saved_search_id?: string;
+    since?: string;
+    until?: string;
+    limit?: number;
+    offset?: number;
+  } = {},
+): Promise<SearchAuditList> {
   const search = new URLSearchParams();
   if (params.actor_id !== undefined) {
     search.set("actor_id", params.actor_id);

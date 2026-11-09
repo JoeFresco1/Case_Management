@@ -343,11 +343,10 @@ class Policy:
 
     # Live role permissions (P11-US4)
 
-    When constructed with ``role_repository``, ``evaluate`` joins the
-    actor's ``user.roles`` (the JSON/IdP claim string names) against
-    the static ``Role`` registry AND the live ``roles`` table. The two
-    sources are unioned, so granting a permission via
-    ``update_role_permissions`` takes effect on the very next request.
+    When constructed with ``role_repository``, ``evaluate`` treats the
+    live role-assignment store as authoritative. The static ``Role``
+    registry is used only when no repository is wired, so a stale
+    identity claim cannot restore a revoked built-in permission.
 
     Note on shape: ``user.roles`` is the actor's *role-name* set (the
     claim), not the actor's permission set. The Policy looks up each
@@ -425,10 +424,10 @@ class Policy:
         1. Cross-tenant actors are denied unconditionally.
         2. System actors bypass role checks for actions in
            ``SYSTEM_BYPASS`` (currently empty; reserved for internal jobs).
-        3. The actor's roles are checked against the static registry;
-           a single matching role grants the action.
-        4. When a ``role_repository`` is configured, the actor's roles
-           are also looked up live; the union of permissions is used.
+        3. When a ``role_repository`` is configured, its live permission
+           set is authoritative for this decision.
+        4. Without a repository, the actor's roles are checked against
+           the static registry as a local/test fallback.
         5. Unknown (non-enum) action -> deny (defensive default).
         """
         if not isinstance(action, Action):
@@ -443,19 +442,18 @@ class Policy:
         if user.is_system and action in SYSTEM_BYPASS:
             return Decision.allow("system bypass")
 
-        # 3. Static role membership.
-        for role_name in user.roles:
-            if action in self.role_actions(role_name):
-                return Decision.allow(f"role:{role_name}")
-
-        # 4. Live role lookup. The actor's assignment table is the
-        # authoritative source for what roles they currently hold. If
-        # no role repository is wired this is a no-op and the static
-        # registry has already had its say.
         if self._role_repository is not None:
+            # why: unioning the static catalogue here would let a stale
+            # built-in claim undo a live revocation.
             live = await self._live_role_actions(user.tenant_id, user.user_id, user.roles)
             if action in live:
                 return Decision.allow("role-assignment")
+        else:
+            # Static grants remain useful for local/unit-test callers
+            # that have no persistent role-assignment repository.
+            for role_name in user.roles:
+                if action in self.role_actions(role_name):
+                    return Decision.allow(f"role:{role_name}")
 
         # 5. No matching grant.
         return Decision.deny("no role grants this action")

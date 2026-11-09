@@ -534,6 +534,40 @@ def _make_active_sub(
 
 
 @pytest.mark.asyncio
+async def test_catalog_subscriber__enqueue_failure__propagates_for_outbox_retry() -> None:
+    """An event is not acknowledged when no durable delivery row exists."""
+    sub_repo = InMemorySubscriptionRepository()
+    sub = _make_active_sub()
+    await sub_repo.add(sub)
+
+    class _UnavailableDeliveryRepository(InMemoryDeliveryRepository):
+        async def get_by_event(
+            self, tenant_id: UUID, subscription_id: UUID, event_id: UUID
+        ) -> OutboundDelivery | None:
+            raise RuntimeError("delivery repository unavailable")
+
+    subscriber = outbound_uc.make_catalog_subscriber(
+        delivery_service_factory=lambda: None,
+        subscription_repo=sub_repo,
+        delivery_repo=_UnavailableDeliveryRepository(),
+        audit=InMemoryAuditStore(),
+        clock=FixedClock(),
+    )
+
+    with pytest.raises(RuntimeError, match="delivery repository unavailable"):
+        await subscriber(
+            {
+                "tenant_id": str(TENANT),
+                "event_id": str(uuid4()),
+                "event_type": "CaseCreated",
+                "payload": {"case_id": str(uuid4())},
+                "correlation_id": "corr-enqueue-retry",
+                "occurred_at": "2026-09-02T00:00:00Z",
+            }
+        )
+
+
+@pytest.mark.asyncio
 async def test_enqueue_delivery__first_event__creates_row_and_audit() -> None:
     # given a subscription and a fresh delivery repo
     audit = InMemoryAuditStore()

@@ -14,6 +14,7 @@ Naming: ``test_<unit>_<scenario>__<expectation>`` with given/when/then.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
@@ -56,11 +57,13 @@ from app.interfaces.http.routers.events import router as events_router
 from app.interfaces.http.routers.extensions import router as extensions_router
 from app.interfaces.http.routers.graphql import router as graphql_router
 from app.interfaces.http.routers.webhooks import router as webhooks_router
+from tests._live_roles import seed_live_roles
 
 TENANT_A = UUID("11111111-1111-1111-1111-111111111111")
 TENANT_B = UUID("22222222-2222-2222-2222-222222222222")
 ADMIN_A = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 WORKER_A = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+ADMIN_B = UUID("abababab-abab-abab-abab-abababababab")
 NOW = datetime(2026, 8, 31, 12, 0, 0, tzinfo=UTC)
 
 
@@ -86,6 +89,24 @@ def _override_db(session_factory: async_sessionmaker[AsyncSession]):  # type: ig
             yield session
 
     return _gen
+
+
+def _seed_live_actor(
+    session_factory: async_sessionmaker[AsyncSession],
+    *,
+    roles: tuple[str, ...],
+    tenant_id: UUID = TENANT_A,
+    user_id: UUID = ADMIN_A,
+) -> None:
+    """Persist the live roles used by an SQL-backed HTTP actor fixture."""
+    asyncio.run(
+        seed_live_roles(
+            session_factory,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            role_names=roles,
+        )
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -168,6 +189,7 @@ def _build_outbox_app(
     roles: tuple[str, ...] = ("process_admin",),
 ) -> FastAPI:
     """Build a minimal app with the outbox router + SQL role provider."""
+    _seed_live_actor(session_factory, roles=roles)
     app = FastAPI()
     app.state.admin_outbox_http_dependencies = SqlAdminOutboxHttpDependencyProvider()
     if service is not None:
@@ -356,6 +378,12 @@ def _build_webhooks_app(
     user_id: UUID = ADMIN_A,
 ) -> FastAPI:
     """Build a minimal app with the webhooks router + SQL providers."""
+    _seed_live_actor(
+        session_factory,
+        roles=roles,
+        tenant_id=tenant_id,
+        user_id=user_id,
+    )
     app = FastAPI()
     app.state.webhook_http_dependencies = SqlWebhookHttpDependencyProvider()
     app.include_router(webhooks_router, prefix="/api/v1")
@@ -498,7 +526,7 @@ def test_webhook_subscription__cross_tenant__not_found(
         assert created.status_code == 201, created.text
         sub_id = created.json()["id"]
     # // when a tenant-B admin patches the same id
-    app_b = _build_webhooks_app(sql_session_factory, tenant_id=TENANT_B)
+    app_b = _build_webhooks_app(sql_session_factory, tenant_id=TENANT_B, user_id=ADMIN_B)
     with TestClient(app_b) as client:
         response = client.patch(
             f"/api/v1/webhooks/subscriptions/{sub_id}",
@@ -543,6 +571,8 @@ def _build_graphql_app(
     authenticated: bool = True,
 ) -> FastAPI:
     """Build a minimal app with the governed GraphQL router."""
+    if authenticated:
+        _seed_live_actor(session_factory, roles=("intake",))
     app = FastAPI()
     app.state.case_http_dependencies = SqlCaseHttpDependencyProvider()
     app.include_router(graphql_router, prefix="/api/v1")
@@ -680,6 +710,7 @@ def _build_extensions_app(
     monkeypatch: Any = None,
 ) -> FastAPI:
     """Build a minimal app with the extensions router + SQL audit store."""
+    _seed_live_actor(session_factory, roles=roles)
     app = FastAPI()
     app.state.audit_http_dependencies = SqlAuditHttpDependencyProvider()
     app.include_router(extensions_router, prefix="/api/v1")

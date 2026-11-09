@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { HomeView } from "./HomeView";
@@ -27,6 +27,56 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 describe("HomeView (C-7 worker UX)", () => {
   afterEach(() => vi.restoreAllMocks());
+
+  it("adds a returned case to favorites without entering a case ID", async () => {
+    const id = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
+    const dashboard = {
+      user_id: USER,
+      tenant_id: TENANT,
+      widgets: [],
+      favorites: [] as string[],
+      shortcuts: [{ label: "Review queue", target: "/queues" }],
+      grouping: "queue",
+      sort: "due",
+      task_pane_case_id: null,
+    };
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes("/cases?"))
+        return jsonResponse({
+          items: [
+            {
+              id,
+              title: "Sample request",
+              reference: "C-DEMO-001",
+              status: "open",
+            },
+          ],
+        });
+      if (url.includes("/home/dashboard")) {
+        if (init?.method === "PUT")
+          dashboard.favorites = JSON.parse(String(init.body)).favorites;
+        return jsonResponse(dashboard);
+      }
+      if (url.includes("/effective")) return jsonResponse({ preferences: [] });
+      if (url.includes("/preference-policy"))
+        return jsonResponse({ locked: {}, allowed: {} });
+      return jsonResponse({ values: {} });
+    });
+
+    renderWithClient();
+    expect(
+      await screen.findByRole("link", { name: /Sample request/ }),
+    ).toHaveAttribute("href", `/cases/${id}`);
+    expect(
+      await screen.findByRole("link", { name: "Review queue" }),
+    ).toHaveAttribute("href", "/queues");
+    fireEvent.click(screen.getByRole("button", { name: "Add to favorites" }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Favorited" })).toBeDisabled(),
+    );
+    expect(dashboard.favorites).toEqual([id]);
+  });
 
   it("test_home_admin_policy__overrides_user_preference__shows_locked_admin_value", async () => {
     // // given stored user values conflicting with an admin lock
@@ -82,7 +132,9 @@ describe("HomeView (C-7 worker UX)", () => {
 
     // // then the locked admin value renders with its badge.
     await waitFor(() =>
-      expect(screen.getByLabelText("theme locked by admin")).toBeInTheDocument(),
+      expect(
+        screen.getByLabelText("theme locked by admin"),
+      ).toBeInTheDocument(),
     );
     expect(screen.getByText(/theme=light/)).toBeInTheDocument();
     const themeSelect = screen.getByLabelText(

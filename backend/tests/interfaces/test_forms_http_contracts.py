@@ -61,6 +61,7 @@ from app.infrastructure.persistence.repositories.form_repository import (
 from app.interfaces.http.errors import ErrorResponse, domain_error_handler
 from app.interfaces.http.routers import forms as forms_router_module
 from app.interfaces.http.routers.admin_form_bindings import router as admin_router
+from tests._live_roles import seed_live_roles
 
 TENANT_A = UUID("11111111-1111-1111-1111-111111111111")
 TENANT_B = UUID("22222222-2222-2222-2222-222222222222")
@@ -102,6 +103,14 @@ def _build_forms_app(
     tenant_id: UUID = TENANT_A,
 ) -> FastAPI:
     """Build a minimal app with the production forms provider."""
+    _run(
+        seed_live_roles(
+            session_factory,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            role_names=roles,
+        )
+    )
 
     async def _override_get_db() -> AsyncIterator[AsyncSession]:
         async with session_factory() as session:
@@ -130,6 +139,14 @@ def _build_admin_app(
     tenant_id: UUID = TENANT_A,
 ) -> FastAPI:
     """Build a minimal app with the production admin-bindings provider."""
+    _run(
+        seed_live_roles(
+            session_factory,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            role_names=roles,
+        )
+    )
 
     async def _override_get_db() -> AsyncIterator[AsyncSession]:
         async with session_factory() as session:

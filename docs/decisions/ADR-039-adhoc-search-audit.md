@@ -49,6 +49,10 @@ needed — `search_audit.saved_search_id` has been nullable since `0012`
 exactly for this extension. `GET /search/cases` is added as a plan-path
 alias of `GET /cases/search` (same use case, same gate, same audit row).
 
+ADR-048 strengthens this projection: free text and all filter operands are
+redacted in audit shapes, including when their field is not classified as
+sensitive. Saved-search execution fields are retained separately for replay.
+
 ## Consequences
 
 - `GET /search_audit` (AUDIT_READ) now covers ad-hoc and saved executions

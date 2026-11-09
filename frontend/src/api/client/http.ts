@@ -10,6 +10,7 @@ export const API_BASE = "/api/v1";
 export class ApiClientError extends Error {
   readonly status: number;
   readonly correlationId?: string;
+  readonly code?: string;
   readonly details?: Record<string, unknown>;
 
   constructor(
@@ -17,42 +18,88 @@ export class ApiClientError extends Error {
     status: number,
     correlationId?: string,
     details?: Record<string, unknown>,
+    code?: string,
   ) {
     super(message);
     this.status = status;
     this.correlationId = correlationId;
     this.details = details;
+    this.code = code;
+  }
+}
+
+type ErrorPayload = {
+  code?: string;
+  message?: string;
+  details?: Record<string, unknown> | null;
+  correlation_id?: string;
+};
+
+function mutationMethod(method: string): boolean {
+  return ["POST", "PATCH", "PUT", "DELETE"].includes(method.toUpperCase());
+}
+
+function shouldRequireIdempotencyKey(path: string, method: string): boolean {
+  if (!mutationMethod(method)) {
+    return false;
+  }
+  if (method.toUpperCase() !== "POST") {
+    return true;
+  }
+
+  // These POSTs are queries or bearer-token authentication, not actor mutations.
+  const routePath = path
+    .split("?", 1)[0]
+    .replace(/^\/api\/v1/, "")
+    .replace(/\/$/, "");
+  return !(
+    routePath === "/search" ||
+    routePath === "/search/semantic" ||
+    /^\/search\/saved\/[^/]+\/run$/.test(routePath) ||
+    /^\/admin\/workflows\/[^/]+\/versions\/[^/]+\/simulate$/.test(routePath) ||
+    routePath === "/bundles/links/redeem"
+  );
+}
+
+function requestHeaders(path: string, init: RequestInit): Headers {
+  const isMultipart = init.body instanceof FormData;
+  const method = init.method ?? "GET";
+  const headers = new Headers({
+    ...(isMultipart ? {} : { "Content-Type": "application/json" }),
+    "X-Correlation-Id": crypto.randomUUID(),
+    ...(shouldRequireIdempotencyKey(path, method)
+      ? { "Idempotency-Key": crypto.randomUUID() }
+      : {}),
+  });
+  new Headers(init.headers).forEach((value, name) => headers.set(name, value));
+  return headers;
+}
+
+async function readErrorPayload(response: Response): Promise<ErrorPayload> {
+  try {
+    return (await response.json()) as ErrorPayload;
+  } catch {
+    return {};
   }
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const correlationId = crypto.randomUUID();
-  const isMultipart = init.body instanceof FormData;
   const response = await fetch(`${API_BASE}${path}`, {
     ...init,
-    headers: {
-      ...(isMultipart ? {} : { "Content-Type": "application/json" }),
-      "X-Correlation-Id": correlationId,
-      ...(init.headers ?? {}),
-    },
+    headers: requestHeaders(path, init),
   });
   if (!response.ok) {
-    let body: {
-      code?: string;
-      message?: string;
-      details?: Record<string, unknown>;
-    } = {};
-    try {
-      body = await response.json();
-    } catch {
-      // ignore
-    }
+    const body = await readErrorPayload(response);
     throw new ApiClientError(
       body.message ?? `request failed: ${response.status}`,
       response.status,
+      body.correlation_id,
+      body.details ?? undefined,
       body.code,
-      body.details,
     );
+  }
+  if (response.status === 204) {
+    return undefined as T;
   }
   return (await response.json()) as T;
 }
@@ -64,34 +111,11 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
  * empty 204 body. Annotation DELETE (and several admin DELETEs) answer
  * 204, so this helper resolves void instead of parsing.
  */
-async function requestVoid(path: string, init: RequestInit = {}): Promise<void> {
-  const correlationId = crypto.randomUUID();
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      "X-Correlation-Id": correlationId,
-      ...(init.headers ?? {}),
-    },
-  });
-  if (!response.ok) {
-    let body: {
-      code?: string;
-      message?: string;
-      details?: Record<string, unknown>;
-    } = {};
-    try {
-      body = await response.json();
-    } catch {
-      // ignore
-    }
-    throw new ApiClientError(
-      body.message ?? `request failed: ${response.status}`,
-      response.status,
-      body.code,
-      body.details,
-    );
-  }
+async function requestVoid(
+  path: string,
+  init: RequestInit = {},
+): Promise<void> {
+  await request<unknown>(path, init);
 }
 
 /**
@@ -100,7 +124,8 @@ async function requestVoid(path: string, init: RequestInit = {}): Promise<void> 
  */
 export function isForbiddenLike(error: unknown): boolean {
   return (
-    error instanceof ApiClientError && (error.status === 403 || error.status === 404)
+    error instanceof ApiClientError &&
+    (error.status === 403 || error.status === 404)
   );
 }
 

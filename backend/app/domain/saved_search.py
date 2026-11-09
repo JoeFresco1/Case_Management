@@ -3,9 +3,8 @@
 A saved search is a named, reusable query shape an authorized case worker
 can re-execute later. The query shape is **declarative**: the same
 ``text_query`` + ``filters`` + ``sort`` tuple the use case consumes. The
-domain entity owns the validation and the construction; the application
-layer wires it through the ``SavedSearchRepository`` port and emits an
-audit row each time a saved search is executed.
+saved row retains executable values for its owner, while ``query_shape``
+is a privacy-safe projection used in audit records.
 
 # Why a domain aggregate, not just a JSON blob
 
@@ -147,17 +146,26 @@ class SavedSearch:
         sort: tuple[SortSpec, ...] = (),
         now: Any | None = None,
     ) -> SavedSearch:
-        """Build a saved-search aggregate with a canonical ``query_shape``.
+        """Build a saved-search aggregate with a privacy-safe ``query_shape``.
 
-        The factory builds the ``query_shape`` dict from the inputs so
-        the persisted row carries a stable, serializable representation
-        of the query. The audit row references this exact dict so the
-        security report can replay what was searched without re-parsing
-        the original request.
+        The executable query is retained in ``text_query`` and
+        ``filters``. The persisted audit projection records fields and
+        operators but redacts free text and every filter operand, which
+        may contain sensitive content even when the field classification
+        is incomplete.
         """
         shape = {
-            "text_query": text_query,
-            "filters": [{"field": f[0], "op": f[1], "value": f[2]} for f in filters],
+            "text_query": (
+                {"redacted": True, "reason": "free_text"} if text_query is not None else None
+            ),
+            "filters": [
+                {
+                    "field": f[0],
+                    "op": f[1],
+                    "value": {"redacted": True, "reason": "query_value"},
+                }
+                for f in filters
+            ],
             "sort": [s.to_dict() for s in sort],
         }
         return SavedSearch(

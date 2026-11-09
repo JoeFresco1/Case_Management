@@ -1,0 +1,122 @@
+.page > header {
+  margin-bottom: 24px;
+}
+.page > header p {
+  color: #63778f;
+}
+.layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 32%) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+.register,
+.activity {
+  background: white;
+  border: 1px solid #d9e3ed;
+  border-radius: 12px;
+  padding: 20px;
+  min-width: 0;
+}
+.register label {
+  display: grid;
+  gap: 7px;
+  color: #5a6e86;
+  font-size: 12px;
+}
+.register > button {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  border-bottom: 1px solid #e0e7f0;
+  border-radius: 0;
+  padding: 16px 8px;
+  background: white;
+  color: #213a58;
+}
+.register > button[aria-pressed="true"] {
+  background: #edf4ff;
+  box-shadow: inset 3px 0 #4a75ca;
+}
+.register small,
+.activity small {
+  color: #677d95;
+}
+.register nav {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 18px;
+}
+.activity > header {
+  margin-bottom: 22px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid #dae3ed;
+}
+.activity h2 {
+  font-size: 21px;
+  letter-spacing: -0.03em;
+}
+.empty {
+  padding: 45px 15px;
+  color: #5e7189;
+}
+.empty h2 {
+  color: #233d5d;
+}
+@media (max-width: 800px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}
+.layout {
+  grid-template-columns: 1fr;
+}
+.register {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(130px, 200px);
+  gap: 12px;
+}
+.register > p,
+.register nav,
+.table {
+  grid-column: 1/-1;
+}
+.table {
+  overflow: auto;
+}
+.table table {
+  width: 100%;
+}
+.table th {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: #647a91;
+  letter-spacing: 0.05em;
+}
+.table td {
+  font-size: 13px;
+}
+.table td:first-child a {
+  display: block;
+  font-weight: 600;
+  text-decoration: none;
+}
+.table td:first-child small {
+  display: block;
+}
+.selected td {
+  background: #edf4ff;
+}
+.activity {
+  scroll-margin-top: 20px;
+}
+.register select {
+  text-transform: capitalize;
+}
+@media (max-width: 600px) {
+  .register {
+    grid-template-columns: 1fr;
+  }
+}

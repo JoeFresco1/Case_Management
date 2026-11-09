@@ -12,6 +12,7 @@ import { ApiClientError, api } from "../api/client";
 import type { components } from "../api/types.gen";
 import type { CaseSummary } from "../api/types";
 import { CreateCaseForm } from "./CreateCaseForm";
+import { demoWorkspaces } from "../shell/demoWorkspaces";
 import styles from "./CaseWorkspace.module.css";
 
 type CaseTypeSchema = components["schemas"]["CaseTypeSchemaRequest"];
@@ -42,6 +43,7 @@ export function CreateCasePage(_props: CreateCasePageProps = {}) {
       <section aria-labelledby="create-case-heading">
         <h1 id="create-case-heading">Create case</h1>
         <p className={styles.empty}>No published case types are available for intake.</p>
+        {demoWorkspaces() && window.location.port === "5173" && <a href={demoWorkspaces()!.intake + "/cases/new"}>Open the intake workspace →</a>}
       </section>
     );
   }
@@ -66,6 +68,7 @@ function CreateCaseTypeSelection({
         {types.map((item) => <option key={item.key} value={item.key}>{item.name}</option>)}
       </select>
       <CreateCaseForm
+        key={selected.key}
         caseTypeKey={selected.key}
         publishedSchema={selected.schema as CaseTypeSchema}
         onCreated={onCreated}

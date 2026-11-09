@@ -28,10 +28,12 @@ from app.infrastructure.persistence.queue_http_dependencies import (
 from app.infrastructure.persistence.repositories import SqlTaskRepository
 from app.interfaces.http.errors import domain_error_handler
 from app.interfaces.http.routers.queues import router
+from tests._live_roles import seed_live_roles
 
 TENANT_A = UUID("11111111-1111-1111-1111-111111111111")
 TENANT_B = UUID("22222222-2222-2222-2222-222222222222")
 ADMIN_ID = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+ADMIN_B_ID = UUID("abababab-abab-abab-abab-abababababab")
 WORKER_ID = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
 DELEGATE_ID = UUID("dddddddd-dddd-dddd-dddd-dddddddddddd")
 CASE_ID = UUID("cccccccc-cccc-cccc-cccc-cccccccccccc")
@@ -55,6 +57,14 @@ def _build_app(
     tenant_id: UUID = TENANT_A,
 ) -> FastAPI:
     """Build a minimal app using the production provider composition."""
+    _run(
+        seed_live_roles(
+            session_factory,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            role_names=roles,
+        )
+    )
 
     async def _override_get_db() -> AsyncIterator[AsyncSession]:
         async with session_factory() as session:
@@ -122,7 +132,7 @@ def test_queues_router__list__stays_tenant_scoped(
     sql_session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     """Tenant B's queue is invisible from tenant A (Constitution V)."""
-    app_b = _build_app(sql_session_factory, tenant_id=TENANT_B)
+    app_b = _build_app(sql_session_factory, tenant_id=TENANT_B, user_id=ADMIN_B_ID)
     with TestClient(app_b) as client:
         created = client.post(
             "/api/v1/admin/queues",

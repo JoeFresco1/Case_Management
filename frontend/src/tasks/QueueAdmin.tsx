@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiClientError } from "../api/client";
+import { request, requestVoid } from "../api/client/http";
+import type { components } from "../api/types.gen";
 
 import styles from "../cases/CaseWorkspace.module.css";
 
@@ -18,107 +20,38 @@ import styles from "../cases/CaseWorkspace.module.css";
  * process admin does not have to navigate away mid-edit. Form state
  * is local; failures are surfaced inline.
  */
-type AssignmentPolicy = "manual" | "round_robin";
-
-export interface QueueSummary {
-  id: string;
-  tenant_id: string;
-  key: string;
-  name: string;
-  description: string;
-  assignment_policy: AssignmentPolicy;
-  capacity: number;
-  member_user_ids: string[];
-  rr_cursor: number;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface DefineQueueRequest {
-  key: string;
-  name: string;
-  description?: string;
-  assignment_policy: AssignmentPolicy;
-  capacity: number;
-  member_user_ids: string[];
-}
+export type QueueSummary = components["schemas"]["QueueSummary"];
+export type DefineQueueRequest = components["schemas"]["DefineQueueRequest"];
+type ReconfigureQueueRequest = components["schemas"]["ReconfigureQueueRequest"];
 
 async function fetchQueues(): Promise<QueueSummary[]> {
-  const response = await fetch("/api/v1/admin/queues", {
-    headers: {
-      "X-Correlation-Id": crypto.randomUUID(),
-      "X-Dev-User": "admin",
-      "X-Dev-Tenant": "00000000-0000-0000-0000-000000000000",
-    },
-  });
-  if (!response.ok) {
-    throw await asError(response);
-  }
-  return (await response.json()) as QueueSummary[];
+  return request<QueueSummary[]>("/admin/queues");
 }
 
 async function defineQueue(body: DefineQueueRequest): Promise<QueueSummary> {
-  const response = await fetch("/api/v1/admin/queues", {
+  return request<QueueSummary>("/admin/queues", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Correlation-Id": crypto.randomUUID(),
-      "X-Dev-User": "admin",
-      "X-Dev-Tenant": "00000000-0000-0000-0000-000000000000",
-    },
+    headers: { "Idempotency-Key": crypto.randomUUID() },
     body: JSON.stringify(body),
   });
-  if (!response.ok) {
-    throw await asError(response);
-  }
-  return (await response.json()) as QueueSummary;
 }
 
 async function reconfigureQueue(
   queueId: string,
-  body: Partial<DefineQueueRequest>,
+  body: ReconfigureQueueRequest,
 ): Promise<QueueSummary> {
-  const response = await fetch(`/api/v1/admin/queues/${queueId}`, {
+  return request<QueueSummary>(`/admin/queues/${queueId}`, {
     method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Correlation-Id": crypto.randomUUID(),
-      "X-Dev-User": "admin",
-      "X-Dev-Tenant": "00000000-0000-0000-0000-000000000000",
-    },
+    headers: { "Idempotency-Key": crypto.randomUUID() },
     body: JSON.stringify(body),
   });
-  if (!response.ok) {
-    throw await asError(response);
-  }
-  return (await response.json()) as QueueSummary;
 }
 
 async function retireQueue(queueId: string): Promise<void> {
-  const response = await fetch(`/api/v1/admin/queues/${queueId}`, {
+  await requestVoid(`/admin/queues/${queueId}`, {
     method: "DELETE",
-    headers: {
-      "X-Correlation-Id": crypto.randomUUID(),
-      "X-Dev-User": "admin",
-      "X-Dev-Tenant": "00000000-0000-0000-0000-000000000000",
-    },
+    headers: { "Idempotency-Key": crypto.randomUUID() },
   });
-  if (!response.ok) {
-    throw await asError(response);
-  }
-}
-
-async function asError(response: Response): Promise<ApiClientError> {
-  let body: { message?: string } = {};
-  try {
-    body = await response.json();
-  } catch {
-    // ignore parse errors
-  }
-  return new ApiClientError(
-    body.message ?? `request failed: ${response.status}`,
-    response.status,
-  );
 }
 
 export function QueueAdmin() {
@@ -137,7 +70,7 @@ export function QueueAdmin() {
   });
 
   const reconfigure = useMutation({
-    mutationFn: (vars: { id: string; body: Partial<DefineQueueRequest> }) =>
+    mutationFn: (vars: { id: string; body: ReconfigureQueueRequest }) =>
       reconfigureQueue(vars.id, vars.body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin", "queues"] });

@@ -535,6 +535,47 @@ async def test_revoke_role_immediately_denies_action() -> None:
     assert "no role" in decision_after.reason
 
 
+async def test_revoke_builtin_role__live_repository_overrides_stale_claim() -> None:
+    """A live repository must not let a stale built-in claim restore access."""
+    repo = InMemoryRoleRepository()
+    admin = _admin_user()
+    actor_user_id = uuid4()
+    builtin_role = Role(
+        id=uuid4(),
+        tenant_id=admin.tenant_id,
+        name="intake",
+        description="",
+        permissions=frozenset({Action.CASE_CREATE.value}),
+        is_reserved=True,
+        created_at=NOW,
+    )
+    await repo.add(builtin_role)
+    await repo.assign(
+        admin.tenant_id,
+        actor_user_id,
+        builtin_role.id,
+        assigned_by=admin.user_id,
+        assigned_at=NOW,
+    )
+    actor = _user_context(
+        tenant_id=admin.tenant_id,
+        user_id=actor_user_id,
+        role_names=("intake",),
+    )
+    live_policy = Policy(role_repository=repo)
+
+    before_revoke = await live_policy.evaluate(
+        Action.CASE_CREATE, actor, _resource(admin.tenant_id)
+    )
+    await repo.revoke(admin.tenant_id, actor_user_id, builtin_role.id)
+    after_revoke = await live_policy.evaluate(Action.CASE_CREATE, actor, _resource(admin.tenant_id))
+    static_fallback = await Policy().evaluate(Action.CASE_CREATE, actor, _resource(admin.tenant_id))
+
+    assert before_revoke.allowed is True
+    assert after_revoke.allowed is False
+    assert static_fallback.allowed is True
+
+
 async def test_update_permissions_replaces_set_atomically() -> None:
     """``update_role_permissions`` is a wholesale replace; old
     permissions disappear and new ones appear on the next policy

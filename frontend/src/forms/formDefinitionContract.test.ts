@@ -107,11 +107,11 @@ describe("form definition single-format contract", () => {
     // then paths are versioned and guarded by Idempotency-Key / If-Match
     const [startUrl, startInit] = fetchSpy.mock.calls[0];
     expect(String(startUrl)).toBe("/api/v1/forms/cases/case-1/sessions");
-    expect((startInit?.headers as Record<string, string>)["Idempotency-Key"]).toBeDefined();
+    expect(new Headers(startInit?.headers).get("Idempotency-Key")).toBeTruthy();
     const [saveUrl, saveInit] = fetchSpy.mock.calls[1];
     expect(String(saveUrl)).toBe(
       "/api/v1/forms/cases/case-1/sessions/sess-1/steps/basics",
     );
-    expect((saveInit?.headers as Record<string, string>)["If-Match"]).toBe('"1"');
+    expect(new Headers(saveInit?.headers).get("If-Match")).toBe('"1"');
   });
 });

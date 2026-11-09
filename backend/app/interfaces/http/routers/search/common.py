@@ -150,9 +150,9 @@ def _adhoc_audit_shape(
     and saw how many results" without persisting payload PHI.
 
     The inputs are pre-validated (operator vocabulary + searchable
-    gating already passed), so construction cannot fail in practice;
-    a defensive fallback drops filter values entirely rather than
-    risking a raw value in the audit row.
+    gating already passed), so construction cannot fail in practice.
+    The defensive fallback redacts every operand as well as free text,
+    preserving the privacy boundary if validation rules ever drift.
     """
     try:
         domain_query = SearchQuery(
@@ -168,8 +168,17 @@ def _adhoc_audit_shape(
         # rejected upstream; the audit row must still be safe to write,
         # so field identity is kept but every value is omitted.
         return {
-            "text_query": text_query,
-            "filters": [{"field": f.field, "op": f.op} for f in filters],
+            "text_query": (
+                {"redacted": True, "reason": "free_text"} if text_query is not None else None
+            ),
+            "filters": [
+                {
+                    "field": f.field,
+                    "op": f.op,
+                    "value": {"redacted": True, "reason": "query_value"},
+                }
+                for f in filters
+            ],
             "sort": [],
         }
     return dict(query_shape_for_audit(domain_query))

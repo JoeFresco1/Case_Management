@@ -111,6 +111,29 @@ def test_next_reference__default_template__matches_legacy_shape(
     assert _run(_issue()) == "C-ACME-2026-000001"  # no row staged → same candidate
 
 
+def test_next_reference__business_type_key__normalizes_reference_token(
+    sql_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """CamelCase and hyphenated case-type keys remain valid at intake."""
+    _run(_seed_tenant(sql_session_factory, TENANT_A, "ACME"))
+
+    async def _issue() -> str:
+        async with sql_session_factory() as session:
+            await SqlReferenceFormatRepository(session).upsert(
+                ReferenceFormat(tenant_id=TENANT_A, template="C-{TYPE}-{SEQ}"),
+                now=NOW,
+            )
+            await session.commit()
+        async with sql_session_factory() as session:
+            return (
+                await SqlCaseRepository(session).next_reference(
+                    TENANT_A, now=NOW, type_key="Service-Request"
+                )
+            ).value
+
+    assert _run(_issue()) == "C-SERVICE_REQUEST-000001"
+
+
 def test_next_reference__custom_template__new_cases_use_it_history_kept(
     sql_session_factory: async_sessionmaker[AsyncSession],
 ) -> None:

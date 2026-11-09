@@ -1,141 +1,147 @@
+/** Live team workload, sampled from the operational reporting endpoint. */
 import { useQuery } from "@tanstack/react-query";
 
-import { api } from "../api/client";
+import { api, ApiClientError } from "../api/client";
+import styles from "./Dashboard.module.css";
 
-import styles from "../cases/CaseWorkspace.module.css";
+const priorities = ["urgent", "high", "normal", "low", "other"];
 
-/**
- * Manager KPI dashboard (P12-US8 / FM-054).
- *
- * The component renders a card for each KPI sourced from
- * ``GET /api/v1/reports/dashboards/operational``:
- *
- * - total open cases on the actor's team
- * - total overdue tasks on the actor's team
- * - a per-priority breakdown of the open-cases count
- *
- * Each card carries the dashboard's explicit ``generated_at`` and
- * ``freshness_seconds`` fields so the manager can see exactly when
- * the system of record was sampled (P12 §1) and how stale the data
- * is (FM-054 promises sub-five-second freshness). The component is
- * read-only; reports do not mutate state.
- *
- * The response type is generated from the backend OpenAPI contract and
- * consumed through the shared API client, so identity and error handling
- * remain owned by the application shell rather than this report view.
- */
-
-function formatTimestamp(value: string): string {
-  return new Date(value).toLocaleString();
-}
-
-function formatFreshness(seconds: number): string {
-  if (seconds <= 0) return "just now";
-  if (seconds < 60) return `${seconds}s ago`;
-  const minutes = Math.floor(seconds / 60);
-  return `${minutes}m ago`;
-}
-
-function KpiCard(props: {
-  label: string;
-  value: number;
-  hint?: string;
-  tone?: "neutral" | "warning";
+/** Show the API's priority counts and each bucket's share of the open caseload. */
+function PriorityBreakdown({
+  buckets,
+  total,
+}: {
+  buckets: Record<string, number>;
+  total: number;
 }) {
-  const toneClass =
-    props.tone === "warning" ? styles.error : styles.muted;
-  return (
-    <article className={styles.header}>
-      <h3>{props.label}</h3>
-      <p className={styles.muted} aria-live="polite">
-        <strong>{props.value.toLocaleString()}</strong>
-        {props.hint ? (
-          <>
-            {" "}
-            <span className={toneClass}>· {props.hint}</span>
-          </>
-        ) : null}
-      </p>
-    </article>
+  const order = (name: string) =>
+    priorities.includes(name) ? priorities.indexOf(name) : priorities.length;
+  const entries = Object.entries(buckets).sort(
+    ([a], [b]) => order(a) - order(b) || a.localeCompare(b),
   );
-}
-
-function PriorityBreakdown(props: { buckets: Record<string, number> }) {
-  const entries = Object.entries(props.buckets).sort(([a], [b]) =>
-    a.localeCompare(b),
-  );
-  if (entries.length === 0) {
+  if (!total || !entries.length) {
     return (
-      <p className={styles.empty}>No priority data on this team.</p>
+      <p className={styles.empty}>
+        {total === 0
+          ? "Your team has no open cases."
+          : "The reporting service returned no priority breakdown for this snapshot."}
+      </p>
     );
   }
   return (
-    <ul className={styles.table}>
-      {entries.map(([priority, count]) => (
-        <li key={priority}>
-          <strong>{priority}</strong>: {count.toLocaleString()}
-        </li>
-      ))}
+    <ul className={styles.chart} aria-label="Priority distribution">
+      {entries.map(([priority, count]) => {
+        const share = (count / total) * 100;
+        return (
+          <li key={priority}>
+            <span className={styles.label}>{priority}</span>
+            <div className={styles.track} aria-hidden="true">
+              <span
+                data-priority={priority}
+                style={{ width: `${Math.min(100, share)}%` }}
+              />
+            </div>
+            <strong aria-label={`${count} ${count === 1 ? "case" : "cases"}`}>
+              {count.toLocaleString()}
+            </strong>
+            <small>{Math.round(share)}%</small>
+          </li>
+        );
+      })}
     </ul>
   );
 }
 
+/** Poll interval override for testing and local verification. */
 export interface DashboardProps {
-  /** Optional override of the polling interval in ms. Defaults to 4s
-   *  to stay inside the FM-054 sub-five-second freshness window. */
   refreshIntervalMs?: number;
 }
 
-export function Dashboard(props: DashboardProps) {
-  const refreshIntervalMs = props.refreshIntervalMs ?? 4_000;
+/** Render the authorized team's latest source timestamp, case counts, and overdue work. */
+export function Dashboard({ refreshIntervalMs = 4_000 }: DashboardProps) {
   const query = useQuery({
     queryKey: ["reports", "dashboard", "operational"],
     queryFn: api.getOperationalDashboard,
     refetchInterval: refreshIntervalMs,
     staleTime: 1_000,
   });
-
+  const snapshot = query.data;
+  const denied =
+    query.error instanceof ApiClientError &&
+    [401, 403].includes(query.error.status);
   return (
-    <section className={styles.workspace} aria-label="Operational dashboard">
-      <header className={styles.header}>
-        <h2>Operational KPIs</h2>
-        {query.data ? (
-          <p className={styles.muted}>
-            team:{" "}
-            {query.data.team.length === 0
-              ? "(none)"
-              : query.data.team.join(", ")}{" "}
-            · source time {formatTimestamp(query.data.generated_at)} ·{" "}
-            {formatFreshness(query.data.freshness_seconds)}
-          </p>
-        ) : null}
+    <section className={styles.dashboard} aria-label="Operational dashboard">
+      <header className={styles.heading}>
+        <h1>Operational dashboard</h1>
+        <p>Open cases and overdue work across your team’s queues.</p>
       </header>
-
-      {query.isLoading ? (
-        <p>Loading dashboard…</p>
-      ) : query.error ? (
-        <p className={styles.error}>{query.error.message}</p>
-      ) : query.data ? (
+      {query.error ? (
+        <section role="alert" className={styles.notice}>
+          <h2>
+            {denied
+              ? "Dashboard access is restricted"
+              : "Dashboard unavailable"}
+          </h2>
+          <p>
+            {denied
+              ? "This view requires access to both team cases and tasks."
+              : query.error.message}
+          </p>
+          {!denied && (
+            <button
+              type="button"
+              disabled={query.isFetching}
+              onClick={() => void query.refetch()}
+            >
+              Retry
+            </button>
+          )}
+        </section>
+      ) : query.isLoading ? (
+        <p className={styles.notice} role="status">
+          Loading dashboard…
+        </p>
+      ) : snapshot ? (
         <>
-          <KpiCard
-            label="Open cases"
-            value={query.data.kpis.total_open_cases}
-            hint={`generated_at ${formatTimestamp(query.data.generated_at)}`}
-          />
-          <KpiCard
-            label="Overdue tasks"
-            value={query.data.kpis.total_overdue_tasks}
-            hint={`freshness ${query.data.freshness_seconds}s`}
-            tone={
-              query.data.kpis.total_overdue_tasks > 0 ? "warning" : "neutral"
-            }
-          />
-          <section>
-            <h3>Open cases by priority</h3>
+          <div className={styles.metrics}>
+            <article>
+              <h2>Open cases</h2>
+              <strong>{snapshot.kpis.total_open_cases.toLocaleString()}</strong>
+              <a href="/cases">View case register →</a>
+            </article>
+            <article>
+              <h2>Overdue tasks</h2>
+              <strong data-overdue={snapshot.kpis.total_overdue_tasks > 0}>
+                {snapshot.kpis.total_overdue_tasks.toLocaleString()}
+              </strong>
+              <a href="/tasks">View tasks →</a>
+            </article>
+          </div>
+          <section className={styles.panel}>
+            <h2>Open cases by priority</h2>
             <PriorityBreakdown
-              buckets={query.data.kpis.open_by_priority ?? {}}
+              buckets={snapshot.kpis.open_by_priority ?? {}}
+              total={snapshot.kpis.total_open_cases}
             />
           </section>
+          <dl className={styles.metadata}>
+            <div>
+              <dt>Team queues</dt>
+              <dd>{snapshot.team.join(", ") || "None assigned"}</dd>
+            </div>
+            <div>
+              <dt>Source time</dt>
+              <dd>
+                <time dateTime={snapshot.generated_at}>
+                  {new Date(snapshot.generated_at).toLocaleString()}
+                </time>
+              </dd>
+            </div>
+            <div>
+              <dt>Age when served</dt>
+              <dd>{snapshot.freshness_seconds.toLocaleString()} s</dd>
+            </div>
+          </dl>
         </>
       ) : null}
     </section>

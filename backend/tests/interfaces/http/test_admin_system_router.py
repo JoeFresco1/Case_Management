@@ -28,6 +28,7 @@ from fastapi.testclient import TestClient
 from app.application.configuration.system_settings import (
     InMemorySystemSettingsStore,
 )
+from app.config import get_settings
 from app.deps import UserContext, get_current_user
 from app.domain.errors import DomainError
 from app.infrastructure.system.local_system_adapters import (
@@ -232,7 +233,9 @@ def test_diagnostics__wired_adapters__reports_cache_and_services(
     body = response.json()
     assert body["cache"]["entries"] == 1
     assert body["services_desired"]["outbox"] is True
-    assert body["services_actual"]["outbox"] is True
+    # CI intentionally disables the worker; actual state follows runtime
+    # settings even when the tenant's desired setting remains enabled.
+    assert body["services_actual"]["outbox"] is get_settings().outbox_dispatcher_enabled
     assert body["synthetic_environment"] is True
 
 

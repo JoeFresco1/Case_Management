@@ -59,7 +59,7 @@ describe("FormRenderer published rendering", () => {
     );
     expect(screen.getByLabelText("Title")).toBeInTheDocument();
     expect(screen.queryByLabelText("Notes")).not.toBeInTheDocument();
-    expect(screen.getByText(/1 hidden answer.*notes/)).toBeInTheDocument();
+    expect(await screen.findByText(/1 hidden answer.*notes/)).toBeInTheDocument();
   });
 
   it("names the missing field without losing entered data", async () => {

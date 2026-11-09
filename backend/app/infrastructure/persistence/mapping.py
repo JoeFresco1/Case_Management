@@ -8,7 +8,7 @@ live here so the domain stays free of SQLAlchemy imports.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, overload
 from uuid import UUID
 
 from app.domain.case import Case, CaseReference, CaseStatus
@@ -154,10 +154,10 @@ def case_to_domain(row: CaseRow) -> Case:
         data=row.data,
         current_workflow_state=row.current_workflow_state,
         version_token=row.version_token,
-        created_at=row.created_at,
-        updated_at=row.updated_at,
+        created_at=_normalize_dt(row.created_at),
+        updated_at=_normalize_dt(row.updated_at),
         created_by=row.created_by,
-        closed_at=row.closed_at,
+        closed_at=_normalize_dt(row.closed_at),
     )
 
 
@@ -314,9 +314,9 @@ def task_to_domain(row: TaskRow) -> Task:
         priority=row.priority,
         assignee_user_id=row.assignee_user_id,
         assignee_queue_id=row.assignee_queue_id,
-        due_at=row.due_at,
-        created_at=row.created_at,
-        completed_at=row.completed_at,
+        due_at=_normalize_dt(row.due_at),
+        created_at=_normalize_dt(row.created_at),
+        completed_at=_normalize_dt(row.completed_at),
         completed_by=row.completed_by,
         outcome=row.completion_outcome,
         version_token=row.version_token,
@@ -466,6 +466,14 @@ def legal_hold_from_domain(h: LegalHold) -> dict[str, Any]:
         "created_at": h.placed_at,
         "updated_at": h.released_at or h.placed_at,
     }
+
+
+@overload
+def _normalize_dt(value: datetime) -> datetime: ...
+
+
+@overload
+def _normalize_dt(value: None) -> None: ...
 
 
 def _normalize_dt(value: datetime | None) -> datetime | None:

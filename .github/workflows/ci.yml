@@ -57,6 +57,12 @@ jobs:
       - name: Portable-SQL gate (AC-009)
         run: uv run pytest tests/foundation/test_portable_sql.py tests/foundation/test_migration_portability.py -q --no-cov
 
+      - name: Architecture and synthetic-data gates
+        working-directory: .
+        run: |
+          python scripts/check_architecture_md.py
+          python scripts/ci_synthetic_data_check.py
+
       - name: Pytest + coverage
         run: |
           uv run alembic upgrade head
@@ -81,6 +87,12 @@ jobs:
 
       - name: Typecheck
         run: npm run typecheck
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: Vitest
+        run: npm run test
 
       - name: Build
         run: npm run build

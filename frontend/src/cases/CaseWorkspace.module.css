@@ -170,3 +170,129 @@
   margin: 0.25rem 0;
   font-size: 0.9rem;
 }
+.pageHeading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 0 0 22px;
+}
+.pageHeading h1 {
+  margin: 0;
+}
+.pageHeading a {
+  color: #2859b5;
+  font-weight: 600;
+  text-decoration: none;
+}
+.register {
+  overflow: auto;
+  background: white;
+  border: 1px solid #dce3ed;
+  border-radius: 12px;
+}
+.register table {
+  width: 100%;
+}
+.register th {
+  background: #f8fafc;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  font-size: 10px;
+  color: #65768b;
+  padding: 13px 19px;
+}
+.register td {
+  padding: 16px 19px;
+  text-transform: capitalize;
+}
+.register tr:last-child td {
+  border-bottom: none;
+}
+.register td a {
+  display: block;
+  color: #204a94;
+  text-transform: none;
+  font-weight: 650;
+  text-decoration: none;
+}
+.register small {
+  color: #66778d;
+  font-size: 12px;
+}
+.pill {
+  background: #e6f4ef;
+  color: #24654c;
+  padding: 3px 10px;
+  border-radius: 20px;
+}
+.pagination {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+}
+.pagination span {
+  margin-right: auto;
+  color: #62748a;
+}
+.detail {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.detail > header {
+  grid-column: 1/-1;
+  margin: 0;
+  background: linear-gradient(110deg, #152c51, #294c7b);
+  border-radius: 13px;
+  padding: 30px;
+  color: white;
+}
+.detail > header h1 {
+  font-size: clamp(27px, 3vw, 41px);
+  font-weight: 630;
+  letter-spacing: -0.04em;
+}
+.detail > header .meta {
+  color: #d5e3f6;
+  margin-top: 8px;
+}
+.detail > section {
+  min-width: 0;
+  border: 1px solid #dce3ed;
+  background: white;
+  border-radius: 12px;
+  padding: 21px;
+}
+.detail > section:last-child {
+  grid-column: 1/-1;
+}
+.detail h2 {
+  margin: 0 0 12px;
+  font-size: 18px;
+  color: #213852;
+}
+.fields {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+}
+.fields div {
+  display: grid;
+  grid-template-columns: minmax(70px, 0.5fr) 1fr;
+  gap: 8px;
+}
+.fields dt {
+  color: #66788e;
+  text-transform: capitalize;
+}
+.fields dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 850px) {
+  .detail {
+    grid-template-columns: 1fr;
+  }
+}

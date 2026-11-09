@@ -12,10 +12,12 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.application.authorization import DEFAULT_ROLES
 from app.application.configuration import publish_case_type as publish_case_type_uc
 from app.application.configuration.validate_definition import validate_definition
 from app.application.workflow import publish_workflow as publish_workflow_uc
@@ -51,6 +53,100 @@ from .dataset import (
 )
 
 __all__ = ["_seed"]
+
+
+async def _seed_builtin_roles(
+    session: AsyncSession, tenant_id: UUID
+) -> tuple[dict[str, models.Role], bool]:
+    """Create missing reserved roles and decide whether old users need bootstrap grants.
+
+    Existing assignments make role initialization authoritative: on a later seed,
+    a deleted assignment represents an intentional revocation and must stay deleted.
+    """
+    reserved_names = tuple(role.name for role in DEFAULT_ROLES)
+    has_reserved_roles = (
+        await session.execute(
+            select(models.Role.id)
+            .where(
+                models.Role.tenant_id == tenant_id,
+                models.Role.name.in_(reserved_names),
+            )
+            .limit(1)
+        )
+    ).scalar_one_or_none() is not None
+    has_role_assignments = (
+        await session.execute(
+            select(models.RoleAssignment.user_id)
+            .where(models.RoleAssignment.tenant_id == tenant_id)
+            .limit(1)
+        )
+    ).scalar_one_or_none() is not None
+    bootstrap_existing_users = not has_reserved_roles and not has_role_assignments
+
+    role_rows: dict[str, models.Role] = {}
+    for definition in DEFAULT_ROLES:
+        role_row = (
+            await session.execute(
+                select(models.Role).where(
+                    models.Role.tenant_id == tenant_id,
+                    models.Role.name == definition.name,
+                )
+            )
+        ).scalar_one_or_none()
+        if role_row is None:
+            now = datetime.now(tz=UTC)
+            role_row = models.Role(
+                id=uuid4(),
+                tenant_id=tenant_id,
+                name=definition.name,
+                description=f"Synthetic {definition.name} role.",
+                permissions=sorted(action.value for action in definition.actions),
+                is_reserved=True,
+                created_at=now,
+                updated_at=now,
+            )
+            session.add(role_row)
+            await session.flush()
+        role_rows[role_row.name] = role_row
+    return role_rows, bootstrap_existing_users
+
+
+async def _seed_user_roles(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    user_row: models.User,
+    role_rows: dict[str, models.Role],
+    role_names: tuple[str, ...],
+    grant_missing: bool,
+) -> None:
+    """Create a seed user's missing role assignments when bootstrap policy allows."""
+    if not grant_missing:
+        return
+    for role_name in (name for name in role_rows if name in role_names):
+        role_row = role_rows[role_name]
+        already_assigned = (
+            await session.execute(
+                select(models.RoleAssignment.user_id)
+                .where(
+                    models.RoleAssignment.tenant_id == tenant_id,
+                    models.RoleAssignment.user_id == user_row.id,
+                    models.RoleAssignment.role_id == role_row.id,
+                )
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if already_assigned is None:
+            session.add(
+                models.RoleAssignment(
+                    tenant_id=tenant_id,
+                    user_id=user_row.id,
+                    role_id=role_row.id,
+                    assigned_at=datetime.now(tz=UTC),
+                    assigned_by=None,
+                )
+            )
+    await session.flush()
 
 
 async def _seed() -> dict[str, Any]:  # noqa: PLR0912, PLR0915
@@ -106,6 +202,9 @@ async def _seed() -> dict[str, Any]:  # noqa: PLR0912, PLR0915
         tenant_id = tenant_row.id
         summary["tenant"] = {"id": str(tenant_id), "key": TENANT_KEY}
 
+        # --- Built-in authorization roles ----------------------------------
+        role_rows, bootstrap_existing_users = await _seed_builtin_roles(session, tenant_id)
+
         # --- Users ----------------------------------------------------------
         for su in _synthetic_users(tenant_id):
             user_row = (
@@ -116,36 +215,48 @@ async def _seed() -> dict[str, Any]:  # noqa: PLR0912, PLR0915
                     )
                 )
             ).scalar_one_or_none()
+            created_user = user_row is None
             if user_row is None:
                 now = datetime.now(tz=UTC)
-                session.add(
-                    models.User(
-                        id=su.user_id,
-                        tenant_id=tenant_id,
-                        key=su.key,
-                        display_name=su.display_name,
-                        roles=list(su.roles),
-                        is_system=False,
-                        created_at=now,
-                        updated_at=now,
-                    )
+                user_row = models.User(
+                    id=su.user_id,
+                    tenant_id=tenant_id,
+                    key=su.key,
+                    display_name=su.display_name,
+                    roles=list(su.roles),
+                    is_system=False,
+                    created_at=now,
+                    updated_at=now,
                 )
-            # Register with the dev-header IdP so X-Dev-User=intake
-            # resolves even when the DB session is restarted. We use
-            # the deterministic UUID — NOT the row's id — so callers
-            # in tests can hard-code ``X-Dev-User=intake``.
+                session.add(user_row)
+                await session.flush()
+            # New users receive their seed roles; an empty, pre-role
+            # installation gets one bootstrap of existing users. Later
+            # reseeds leave missing assignments alone so revocations persist.
+            await _seed_user_roles(
+                session,
+                tenant_id=tenant_id,
+                user_row=user_row,
+                role_rows=role_rows,
+                role_names=su.roles,
+                grant_missing=created_user or bootstrap_existing_users,
+            )
+            # Seed runs separately from the server. These aliases make
+            # them available in-process here; the server rehydrates the
+            # same persisted key/UUID pairs during local startup.
             register_local_user(
                 UserContext(
-                    user_id=su.user_id,
-                    tenant_id=tenant_id,
-                    display_name=su.display_name,
-                    roles=su.roles,
-                )
+                    user_id=user_row.id,
+                    tenant_id=user_row.tenant_id,
+                    display_name=user_row.display_name,
+                    roles=tuple(user_row.roles),
+                ),
+                key=user_row.key,
             )
             summary["users"].append(
                 {
-                    "key": su.key,
-                    "user_id": str(su.user_id),
+                    "key": user_row.key,
+                    "user_id": str(user_row.id),
                     "email": su.email,
                 }
             )

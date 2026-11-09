@@ -7,7 +7,8 @@ import type {
   EffectivePreferencesResponse,
 } from "../api/client";
 import { ImportPreview } from "../imports/ImportPreview";
-import styles from "../cases/CaseWorkspace.module.css";
+import { newCaseUrl } from "../shell/demoWorkspaces";
+import styles from "./HomeView.module.css";
 
 /**
  * Worker home dashboard (T5 worker UX / C-7).
@@ -70,6 +71,18 @@ interface RecentEntry {
   viewedAt: string;
 }
 
+/** Allow saved workspace paths to become links only when they resolve to this origin. */
+function isWorkspacePath(target: string): boolean {
+  try {
+    return (
+      target.startsWith("/") &&
+      new URL(target, window.location.origin).origin === window.location.origin
+    );
+  } catch {
+    return false;
+  }
+}
+
 function readRecents(): RecentEntry[] {
   try {
     const raw = localStorage.getItem(RECENTS_STORAGE_KEY);
@@ -78,7 +91,8 @@ function readRecents(): RecentEntry[] {
     if (!Array.isArray(parsed)) return [];
     return parsed.filter(
       (entry) =>
-        typeof entry?.caseId === "string" && typeof entry?.viewedAt === "string",
+        typeof entry?.caseId === "string" &&
+        typeof entry?.viewedAt === "string",
     );
   } catch {
     return [];
@@ -140,6 +154,13 @@ export function HomeView() {
   > | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
 
+  const latestCases = useQuery({
+    queryKey: ["cases", "list", { limit: 5, offset: 0 }],
+    queryFn: () => api.listCases({ limit: 5, offset: 0 }),
+    staleTime: 15_000,
+  });
+  const cases = latestCases.data?.items ?? [];
+
   const dashboardQuery = useQuery({
     queryKey: ["home", "dashboard"],
     queryFn: loadDashboard,
@@ -174,7 +195,10 @@ export function HomeView() {
     () => [...(dashboard?.favorites ?? [])],
     [dashboard],
   );
-  const shortcuts = useMemo(() => [...(dashboard?.shortcuts ?? [])], [dashboard]);
+  const shortcuts = useMemo(
+    () => [...(dashboard?.shortcuts ?? [])],
+    [dashboard],
+  );
   const taskPaneCaseId = dashboard?.task_pane_case_id ?? null;
 
   const recentLimit = Number.parseInt(
@@ -184,7 +208,9 @@ export function HomeView() {
   const taskPaneSide = effectiveValue(effective, "task_pane_side", "right");
 
   useEffect(() => {
-    setRecents(readRecents().slice(0, Number.isNaN(recentLimit) ? 10 : recentLimit));
+    setRecents(
+      readRecents().slice(0, Number.isNaN(recentLimit) ? 10 : recentLimit),
+    );
   }, [recentLimit]);
 
   useEffect(() => {
@@ -238,7 +264,9 @@ export function HomeView() {
     },
     onError: (error) => {
       setSaveMessage(
-        error instanceof ApiClientError ? error.message : "Dashboard save failed.",
+        error instanceof ApiClientError
+          ? error.message
+          : "Dashboard save failed.",
       );
     },
   });
@@ -359,17 +387,33 @@ export function HomeView() {
     effectiveQuery.isLoading ||
     policyQuery.isLoading;
   const loadError =
-    dashboardQuery.error ?? storedQuery.error ?? effectiveQuery.error ?? policyQuery.error;
+    dashboardQuery.error ??
+    storedQuery.error ??
+    effectiveQuery.error ??
+    policyQuery.error;
 
   return (
     <section className={styles.detail} aria-label="Worker home">
-      <header>
-        <h1>Home</h1>
-        <p className={styles.meta}>
-          Configurable dashboard, favorites, shortcuts, grouping, task pane,
-          recents, import preview, and preferences under the admin policy.
-        </p>
+      <header className={styles.hero}>
+        <div>
+          <h1>My workspace</h1>
+          <p>Open a case, pick up assigned work, or return to a favorite.</p>
+        </div>
+        <a className={styles.primaryAction} href={newCaseUrl()}>
+          <span aria-hidden="true">+</span> Create case
+        </a>
       </header>
+      <nav className={styles.workLinks} aria-label="Work areas">
+        <a href="/cases">
+          Case register <span aria-hidden="true">→</span>
+        </a>
+        <a href="/tasks">
+          My tasks <span aria-hidden="true">→</span>
+        </a>
+        <a href="/queues">
+          Work queues <span aria-hidden="true">→</span>
+        </a>
+      </nav>
 
       {isLoading ? <p>Loading home…</p> : null}
       {loadError ? (
@@ -381,296 +425,376 @@ export function HomeView() {
       ) : null}
       {saveMessage ? <p role="status">{saveMessage}</p> : null}
 
-      <section aria-label="Dashboard layout">
-        <h2>Dashboard layout</h2>
-        <fieldset>
-          <legend>Widgets</legend>
-          {ALLOWED_WIDGETS.map((widget) => (
-            <label key={widget} style={{ marginRight: "0.75rem" }}>
-              <input
-                type="checkbox"
-                checked={widgets.includes(widget)}
-                onChange={() => toggleWidget(widget)}
-              />{" "}
-              {widget}
-            </label>
-          ))}
-        </fieldset>
-        <div style={{ display: "flex", gap: "0.75rem", marginTop: "0.5rem" }}>
-          <label>
-            Grouping{" "}
-            <select
-              aria-label="Default grouping"
-              value={grouping}
-              onChange={(event) =>
-                setDashboardDraft({ widgets, grouping: event.target.value, sort })
-              }
-            >
-              {GROUPING_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
+      <datalist id="home-case-options">
+        {cases.map((item) => (
+          <option key={item.id} value={item.id}>
+            {item.reference} · {item.title}
+          </option>
+        ))}
+      </datalist>
+      <datalist id="home-shortcut-options">
+        {["/cases", "/cases/new", "/tasks", "/queues", "/search"].map(
+          (path) => (
+            <option key={path} value={path} />
+          ),
+        )}
+      </datalist>
+      <div className={styles.cards}>
+        <section className={styles.latest} aria-label="Latest cases">
+          <h2>Latest cases</h2>
+          {latestCases.isLoading ? (
+            <p>Loading cases…</p>
+          ) : latestCases.isError ? (
+            <p className={styles.error} role="alert">
+              Could not load the case list.
+            </p>
+          ) : cases.length === 0 ? (
+            <p className={styles.empty}>No cases available.</p>
+          ) : (
+            <ul className={styles.caseList}>
+              {cases.map((item) => (
+                <li key={item.id}>
+                  <a href={`/cases/${item.id}`}>
+                    <strong>{item.title}</strong>
+                    <small>{item.reference}</small>
+                  </a>
+                  <span>{item.status}</span>
+                  <button
+                    type="button"
+                    disabled={
+                      !dashboardQuery.isSuccess ||
+                      dashboardQuery.isFetching ||
+                      saveDashboard.isPending ||
+                      favorites.includes(item.id)
+                    }
+                    onClick={() =>
+                      persistDashboard({ favorites: [...favorites, item.id] })
+                    }
+                  >
+                    {favorites.includes(item.id)
+                      ? "Favorited"
+                      : "Add to favorites"}
+                  </button>
+                </li>
               ))}
-            </select>
-          </label>
-          <label>
-            Sort{" "}
-            <select
-              aria-label="Default sort"
-              value={sort}
-              onChange={(event) =>
-                setDashboardDraft({ widgets, grouping, sort: event.target.value })
-              }
-            >
-              {SORT_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            type="button"
-            onClick={() => persistDashboard()}
-            disabled={saveDashboard.isPending}
-          >
-            {saveDashboard.isPending ? "Saving…" : "Save layout"}
-          </button>
-        </div>
-        {dashboard === null && !dashboardQuery.isLoading ? (
-          <p className={styles.empty}>
-            No dashboard saved yet — pick widgets and save your layout.
-          </p>
-        ) : null}
-      </section>
-
-      <section aria-label="Favorites">
-        <h2>Favorites</h2>
-        {favorites.length === 0 ? (
-          <p className={styles.empty}>No favorites yet.</p>
-        ) : (
-          <ul className={styles.list}>
-            {favorites.map((caseId) => (
-              <li key={caseId} className={styles.listItem}>
-                <a href={`/cases/${caseId}`}>
-                  <code>{caseId.slice(0, 8)}</code>
-                </a>{" "}
-                <button type="button" onClick={() => removeFavorite(caseId)}>
-                  Remove
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
-          <input
-            aria-label="Favorite case id"
-            placeholder="case id"
-            value={favoriteInput}
-            onChange={(event) => setFavoriteInput(event.target.value)}
-          />
-          <button type="button" onClick={addFavorite}>
-            Add favorite
-          </button>
-        </div>
-      </section>
-
-      <section aria-label="Shortcuts">
-        <h2>Shortcuts</h2>
-        {shortcuts.length === 0 ? (
-          <p className={styles.empty}>No shortcuts yet.</p>
-        ) : (
-          <ul className={styles.list}>
-            {shortcuts.map((shortcut, index) => (
-              <li key={`${shortcut.label}-${index}`} className={styles.listItem}>
-                <strong>{shortcut.label}</strong> →{" "}
-                <code>{shortcut.target}</code>{" "}
-                <button type="button" onClick={() => removeShortcut(index)}>
-                  Remove
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
-          <input
-            aria-label="Shortcut label"
-            placeholder="label"
-            value={shortcutLabel}
-            onChange={(event) => setShortcutLabel(event.target.value)}
-          />
-          <input
-            aria-label="Shortcut target"
-            placeholder="/queues/triage"
-            value={shortcutTarget}
-            onChange={(event) => setShortcutTarget(event.target.value)}
-          />
-          <button type="button" onClick={addShortcut}>
-            Add shortcut
-          </button>
-        </div>
-      </section>
-
-      <section aria-label="Task pane">
-        <h2>Task pane</h2>
-        <p className={styles.meta}>
-          Dockable case context. Side: <strong>{taskPaneSide}</strong>
-          {taskPaneSide === "hidden" ? " (pane hidden by preference)" : null}
-        </p>
-        <div style={{ display: "flex", gap: "0.5rem" }}>
-          <input
-            aria-label="Task pane case id"
-            placeholder="case id to dock"
-            value={taskPaneInput}
-            onChange={(event) => setTaskPaneInput(event.target.value)}
-          />
-          <button type="button" onClick={dockTaskPane}>
-            Dock
-          </button>
-          <button type="button" onClick={undockTaskPane}>
-            Undock
-          </button>
-        </div>
-        {taskPaneCaseId ? (
-          <article aria-label="Docked case">
-            {taskPaneQuery.isLoading ? (
-              <p>Loading docked case…</p>
-            ) : taskPaneQuery.error ? (
-              <p className={styles.error}>
-                {taskPaneQuery.error instanceof ApiClientError
-                  ? taskPaneQuery.error.message
-                  : "Failed to load docked case."}
-              </p>
-            ) : taskPaneQuery.data ? (
-              <p className={styles.meta}>
-                Docked:{" "}
-                <a href={`/cases/${taskPaneQuery.data.id}`}>
-                  {taskPaneQuery.data.reference}
-                </a>{" "}
-                · {taskPaneQuery.data.status} · {taskPaneQuery.data.priority}
-              </p>
-            ) : null}
-          </article>
-        ) : (
-          <p className={styles.empty}>No case docked.</p>
-        )}
-      </section>
-
-      <section aria-label="Recent history">
-        <h2>
-          Recent history{" "}
-          <span className={styles.meta}>(local, last {recentLimit})</span>
-        </h2>
-        {widgets.includes("recent_history") || recents.length > 0 ? (
-          <>
-            {recents.length === 0 ? (
-              <p className={styles.empty}>
-                No recents yet — docking a case records it here.
-              </p>
-            ) : (
-              <ul className={styles.list}>
-                {recents.map((entry) => (
-                  <li key={entry.caseId} className={styles.listItem}>
-                    <a href={`/cases/${entry.caseId}`}>
-                      <code>{entry.caseId.slice(0, 8)}</code>
-                    </a>{" "}
-                    <span className={styles.meta}>{entry.viewedAt}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <button type="button" onClick={clearRecents}>
-              Clear recents
-            </button>
-          </>
-        ) : (
-          <p className={styles.empty}>
-            Enable the <code>recent_history</code> widget to show recents here.
-          </p>
-        )}
-      </section>
-
-      {widgets.includes("import_preview") ? (
-        <section aria-label="Import preview">
-          <ImportPreview />
+            </ul>
+          )}
         </section>
-      ) : null}
 
-      <section aria-label="Preferences">
-        <h2>Preferences</h2>
-        <p className={styles.meta}>
-          Locked keys show the admin value and cannot be edited — admin policy
-          overrides user preference.
-        </p>
-        {PREFERENCE_KEYS.map((key) => {
-          const locked = isLocked(effective, key);
-          const value =
-            preferenceDraft?.[key] ??
-            effectiveValue(effective, key, PREFERENCE_OPTIONS[key][0]);
-          return (
-            <div key={key} style={{ display: "flex", gap: "0.5rem", margin: "0.25rem 0" }}>
+        <section aria-label="Favorites">
+          <h2>Favorites</h2>
+          {favorites.length === 0 ? (
+            <p className={styles.empty}>No favorites yet.</p>
+          ) : (
+            <ul className={styles.list}>
+              {favorites.map((caseId) => (
+                <li key={caseId} className={styles.listItem}>
+                  <a href={`/cases/${caseId}`}>
+                    {cases.find((item) => item.id === caseId)?.title ??
+                      caseId.slice(0, 8)}
+                  </a>{" "}
+                  <button type="button" onClick={() => removeFavorite(caseId)}>
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className={styles.controls}>
+            <input
+              aria-label="Favorite case id"
+              list="home-case-options"
+              placeholder="Choose or enter a case ID"
+              value={favoriteInput}
+              onChange={(event) => setFavoriteInput(event.target.value)}
+            />
+            <button type="button" onClick={addFavorite}>
+              Add favorite
+            </button>
+          </div>
+        </section>
+
+        <section aria-label="Shortcuts">
+          <h2>Shortcuts</h2>
+          {shortcuts.length === 0 ? (
+            <p className={styles.empty}>No shortcuts yet.</p>
+          ) : (
+            <ul className={styles.list}>
+              {shortcuts.map((shortcut, index) => (
+                <li
+                  key={`${shortcut.label}-${index}`}
+                  className={styles.listItem}
+                >
+                  {isWorkspacePath(shortcut.target) ? (
+                    <a href={shortcut.target}>{shortcut.label}</a>
+                  ) : (
+                    <strong>{shortcut.label}</strong>
+                  )}{" "}
+                  · <code>{shortcut.target}</code>{" "}
+                  <button type="button" onClick={() => removeShortcut(index)}>
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className={styles.controls}>
+            <input
+              aria-label="Shortcut label"
+              placeholder="Shortcut name"
+              value={shortcutLabel}
+              onChange={(event) => setShortcutLabel(event.target.value)}
+            />
+            <input
+              aria-label="Shortcut target"
+              list="home-shortcut-options"
+              placeholder="Choose a destination"
+              value={shortcutTarget}
+              onChange={(event) => setShortcutTarget(event.target.value)}
+            />
+            <button type="button" onClick={addShortcut}>
+              Add shortcut
+            </button>
+          </div>
+        </section>
+
+        <section aria-label="Task pane">
+          <h2>Task pane</h2>
+          <p className={styles.meta}>
+            Pane position · <strong>{taskPaneSide}</strong>
+            {taskPaneSide === "hidden" ? " (pane hidden by preference)" : null}
+          </p>
+          <div className={styles.controls}>
+            <input
+              aria-label="Task pane case id"
+              list="home-case-options"
+              placeholder="Choose or enter a case ID"
+              value={taskPaneInput}
+              onChange={(event) => setTaskPaneInput(event.target.value)}
+            />
+            <button type="button" onClick={dockTaskPane}>
+              Dock
+            </button>
+            <button type="button" onClick={undockTaskPane}>
+              Undock
+            </button>
+          </div>
+          {taskPaneCaseId ? (
+            <article aria-label="Docked case">
+              {taskPaneQuery.isLoading ? (
+                <p>Loading docked case…</p>
+              ) : taskPaneQuery.error ? (
+                <p className={styles.error}>
+                  {taskPaneQuery.error instanceof ApiClientError
+                    ? taskPaneQuery.error.message
+                    : "Failed to load docked case."}
+                </p>
+              ) : taskPaneQuery.data ? (
+                <p className={styles.meta}>
+                  Docked:{" "}
+                  <a href={`/cases/${taskPaneQuery.data.id}`}>
+                    {taskPaneQuery.data.reference}
+                  </a>{" "}
+                  · {taskPaneQuery.data.status} · {taskPaneQuery.data.priority}
+                </p>
+              ) : null}
+            </article>
+          ) : (
+            <p className={styles.empty}>No case docked.</p>
+          )}
+        </section>
+
+        <section aria-label="Recent history">
+          <h2>
+            Recent history{" "}
+            <span className={styles.meta}>(local, last {recentLimit})</span>
+          </h2>
+          {widgets.includes("recent_history") || recents.length > 0 ? (
+            <>
+              {recents.length === 0 ? (
+                <p className={styles.empty}>
+                  No recents yet — docking a case records it here.
+                </p>
+              ) : (
+                <ul className={styles.list}>
+                  {recents.map((entry) => (
+                    <li key={entry.caseId} className={styles.listItem}>
+                      <a href={`/cases/${entry.caseId}`}>
+                        <code>{entry.caseId.slice(0, 8)}</code>
+                      </a>{" "}
+                      <span className={styles.meta}>{entry.viewedAt}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <button type="button" onClick={clearRecents}>
+                Clear recents
+              </button>
+            </>
+          ) : (
+            <p className={styles.empty}>
+              Enable the <code>recent_history</code> widget to show recents
+              here.
+            </p>
+          )}
+        </section>
+
+        {widgets.includes("import_preview") ? (
+          <section aria-label="Import preview">
+            <ImportPreview />
+          </section>
+        ) : null}
+      </div>
+      <details className={styles.settings}>
+        <summary>Workspace settings</summary>
+        <div className={styles.settingsBody}>
+          <section aria-label="Dashboard layout">
+            <h2>Dashboard layout</h2>
+            <fieldset>
+              <legend>Widgets</legend>
+              {ALLOWED_WIDGETS.map((widget) => (
+                <label key={widget} className={styles.widget}>
+                  <input
+                    type="checkbox"
+                    checked={widgets.includes(widget)}
+                    onChange={() => toggleWidget(widget)}
+                  />{" "}
+                  {widget.replaceAll("_", " ")}
+                </label>
+              ))}
+            </fieldset>
+            <div className={styles.controls}>
               <label>
-                {key}{" "}
+                Grouping{" "}
                 <select
-                  aria-label={`Preference ${key}`}
-                  value={value}
-                  disabled={locked}
+                  aria-label="Default grouping"
+                  value={grouping}
                   onChange={(event) =>
-                    setPreferenceDraft({
-                      ...(preferenceDraft ?? {}),
-                      [key]: event.target.value,
+                    setDashboardDraft({
+                      widgets,
+                      grouping: event.target.value,
+                      sort,
                     })
                   }
                 >
-                  {PREFERENCE_OPTIONS[key].map((option) => (
+                  {GROUPING_OPTIONS.map((option) => (
                     <option key={option} value={option}>
                       {option}
                     </option>
                   ))}
                 </select>
               </label>
-              {locked ? (
-                <span aria-label={`${key} locked by admin`}>
-                  🔒 admin-locked
-                </span>
-              ) : null}
+              <label>
+                Sort{" "}
+                <select
+                  aria-label="Default sort"
+                  value={sort}
+                  onChange={(event) =>
+                    setDashboardDraft({
+                      widgets,
+                      grouping,
+                      sort: event.target.value,
+                    })
+                  }
+                >
+                  {SORT_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                onClick={() => persistDashboard()}
+                disabled={saveDashboard.isPending}
+              >
+                {saveDashboard.isPending ? "Saving…" : "Save layout"}
+              </button>
             </div>
-          );
-        })}
-        <button
-          type="button"
-          onClick={persistPreferences}
-          disabled={savePreferences.isPending}
-        >
-          {savePreferences.isPending ? "Saving…" : "Save preferences"}
-        </button>
-      </section>
+            {dashboard === null && !dashboardQuery.isLoading ? (
+              <p className={styles.empty}>
+                No dashboard saved yet — pick widgets and save your layout.
+              </p>
+            ) : null}
+          </section>
 
-      <section aria-label="Admin preference policy">
-        <h2>Admin preference policy</h2>
-        {policyQuery.data ? (
-          <>
+          <section aria-label="Preferences">
+            <h2>Preferences</h2>
             <p className={styles.meta}>
-              Locked:{" "}
-              {Object.keys(policyQuery.data.locked).length === 0
-                ? "(none)"
-                : Object.entries(policyQuery.data.locked)
-                    .map(([key, value]) => `${key}=${value}`)
-                    .join(", ")}
+              Your administrator manages locked preferences.
             </p>
-            <p className={styles.meta}>
-              Allowed:{" "}
-              {Object.keys(policyQuery.data.allowed).length === 0
-                ? "(none)"
-                : Object.entries(policyQuery.data.allowed)
-                    .map(([key, values]) => `${key}=[${values.join("|")}]`)
-                    .join(", ")}
-            </p>
-          </>
-        ) : (
-          <p className={styles.empty}>No policy published.</p>
-        )}
-      </section>
+            {PREFERENCE_KEYS.map((key) => {
+              const locked = isLocked(effective, key);
+              const value =
+                preferenceDraft?.[key] ??
+                effectiveValue(effective, key, PREFERENCE_OPTIONS[key][0]);
+              return (
+                <div key={key} className={styles.preference}>
+                  <label>
+                    {key.replaceAll("_", " ")}{" "}
+                    <select
+                      aria-label={`Preference ${key}`}
+                      value={value}
+                      disabled={locked}
+                      onChange={(event) =>
+                        setPreferenceDraft({
+                          ...(preferenceDraft ?? {}),
+                          [key]: event.target.value,
+                        })
+                      }
+                    >
+                      {PREFERENCE_OPTIONS[key].map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {locked ? (
+                    <span aria-label={`${key} locked by admin`}>
+                      🔒 admin-locked
+                    </span>
+                  ) : null}
+                </div>
+              );
+            })}
+            <button
+              type="button"
+              onClick={persistPreferences}
+              disabled={savePreferences.isPending}
+            >
+              {savePreferences.isPending ? "Saving…" : "Save preferences"}
+            </button>
+          </section>
+
+          <section aria-label="Admin preference policy">
+            <h2>Admin preference policy</h2>
+            {policyQuery.data ? (
+              <>
+                <p className={styles.meta}>
+                  Locked:{" "}
+                  {Object.keys(policyQuery.data.locked).length === 0
+                    ? "(none)"
+                    : Object.entries(policyQuery.data.locked)
+                        .map(([key, value]) => `${key}=${value}`)
+                        .join(", ")}
+                </p>
+                <p className={styles.meta}>
+                  Allowed:{" "}
+                  {Object.keys(policyQuery.data.allowed).length === 0
+                    ? "(none)"
+                    : Object.entries(policyQuery.data.allowed)
+                        .map(([key, values]) => `${key}=[${values.join("|")}]`)
+                        .join(", ")}
+                </p>
+              </>
+            ) : (
+              <p className={styles.empty}>No policy published.</p>
+            )}
+          </section>
+        </div>
+      </details>
     </section>
   );
 }

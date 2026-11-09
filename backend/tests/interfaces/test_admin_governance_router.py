@@ -20,6 +20,7 @@ from app.infrastructure.persistence.admin_governance_http_dependencies import (
 from app.infrastructure.persistence.repositories import SqlConfigurationPublicationRepository
 from app.interfaces.http.errors import domain_error_handler
 from app.interfaces.http.routers.admin_governance import router
+from tests._live_roles import seed_live_roles
 
 TENANT_A = UUID("11111111-1111-1111-1111-111111111111")
 TENANT_B = UUID("22222222-2222-2222-2222-222222222222")
@@ -61,6 +62,15 @@ def _build_app(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> tuple[FastAPI, dict[str, UUID]]:
     """Build a minimal app using the production composition provider."""
+    for tenant_id in (TENANT_A, TENANT_B):
+        _run(
+            seed_live_roles(
+                session_factory,
+                tenant_id=tenant_id,
+                user_id=ADMIN_ID,
+                role_names=("process_admin",),
+            )
+        )
     current_tenant = {"id": TENANT_A}
 
     async def _override_get_db() -> AsyncIterator[AsyncSession]:

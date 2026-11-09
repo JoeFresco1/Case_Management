@@ -121,8 +121,22 @@ async def idempotency_app(
         await db.commit()
         return {"route": request.url.path, "body": body}
 
-    app.add_api_route("/api/v1/mutate", mutate, methods=["POST"])
-    app.add_api_route("/api/v1/other", mutate, methods=["POST"])
+    app.add_api_route("/api/v1/mutate", mutate, methods=["POST", "PATCH", "PUT", "DELETE"])
+    app.add_api_route("/api/v1/other", mutate, methods=["POST", "PATCH", "PUT", "DELETE"])
+
+    async def query_post(request: Request) -> dict[str, str]:
+        """Represent a route that performs its own query or bearer-token authorization."""
+        return {"path": request.url.path}
+
+    app.add_api_route("/api/v1/search", query_post, methods=["POST"])
+    app.add_api_route("/api/v1/search/semantic", query_post, methods=["POST"])
+    app.add_api_route("/api/v1/search/saved/{saved_search_id}/run", query_post, methods=["POST"])
+    app.add_api_route(
+        "/api/v1/admin/workflows/{workflow_id}/versions/{version_number}/simulate",
+        query_post,
+        methods=["POST"],
+    )
+    app.add_api_route("/api/v1/bundles/links/redeem", query_post, methods=["POST"])
     app.add_middleware(IdempotencyMiddleware, scope_paths=("/api/v1/",))
     try:
         yield app, session_factory
@@ -187,6 +201,88 @@ async def test_same_key_same_request__executes_once_and_replays(
     assert second.headers["idempotency-replay"] == "true"
     assert second.json() == first.json()
     assert len(await _rows(factory)) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("method", ["POST", "PATCH", "PUT", "DELETE"])
+async def test_mutating_method_without_key__is_rejected(
+    method: str,
+    idempotency_app: tuple[FastAPI, async_sessionmaker[AsyncSession]],
+) -> None:
+    """Every state-changing HTTP verb requires the same replay key contract."""
+    app, factory = idempotency_app
+    async with _client(app) as client:
+        response = await client.request(
+            method,
+            "/api/v1/mutate",
+            content="alpha",
+            headers={"X-Dev-User": str(USER_A), "X-Dev-Tenant": str(TENANT_A)},
+        )
+    assert response.status_code == 400
+    assert response.json()["code"] == "validation_failed"
+    assert await _rows(factory) == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("method", ["POST", "PATCH", "PUT", "DELETE"])
+async def test_mutating_method_with_key__executes_once_and_replays(
+    method: str,
+    idempotency_app: tuple[FastAPI, async_sessionmaker[AsyncSession]],
+) -> None:
+    """Each mutation verb buffers and replays its original response."""
+    app, factory = idempotency_app
+    async with _client(app) as client:
+        first = await client.request(
+            method,
+            "/api/v1/mutate",
+            content="alpha",
+            headers=_headers(USER_A, TENANT_A, f"{method.lower()}-key"),
+        )
+        second = await client.request(
+            method,
+            "/api/v1/mutate",
+            content="alpha",
+            headers=_headers(USER_A, TENANT_A, f"{method.lower()}-key"),
+        )
+    assert first.status_code == second.status_code == 200
+    assert second.headers["idempotency-replay"] == "true"
+    assert second.json() == first.json()
+    assert len(await _rows(factory)) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/v1/search",
+        "/api/v1/search/semantic",
+        "/api/v1/search/saved/11111111-1111-1111-1111-111111111111/run",
+        "/api/v1/admin/workflows/11111111-1111-1111-1111-111111111111/versions/1/simulate",
+        "/api/v1/bundles/links/redeem",
+    ],
+)
+async def test_query_and_bearer_post_without_key__reaches_route(
+    path: str,
+    idempotency_app: tuple[FastAPI, async_sessionmaker[AsyncSession]],
+) -> None:
+    """Read-only POSTs and the no-auth redemption path bypass mutation handling."""
+    app, _ = idempotency_app
+    async with _client(app) as client:
+        response = await client.post(path, json={})
+    assert response.status_code == 200
+    assert response.json() == {"path": path}
+
+
+@pytest.mark.asyncio
+async def test_saved_search_creation_without_key__remains_protected(
+    idempotency_app: tuple[FastAPI, async_sessionmaker[AsyncSession]],
+) -> None:
+    """The query exemption does not accidentally cover saved-search creation."""
+    app, _ = idempotency_app
+    async with _client(app) as client:
+        response = await client.post("/api/v1/search/saved", json={})
+    assert response.status_code == 400
+    assert response.json()["code"] == "validation_failed"
 
 
 @pytest.mark.asyncio

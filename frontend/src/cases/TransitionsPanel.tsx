@@ -25,7 +25,7 @@ export function TransitionsPanel({ caseSummary }: { caseSummary: CaseSummary }) 
   const transitionMutation = useMutation({
     mutationFn: (transitionKey: string) => api.executeTransition(caseSummary.id, transitionKey),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["cases", caseSummary.id] });
+      await queryClient.invalidateQueries({ queryKey: ["cases"] });
       await queryClient.invalidateQueries({ queryKey: ["timeline", caseSummary.id] });
       await queryClient.invalidateQueries({ queryKey: ["transitions", caseSummary.id] });
     },
@@ -33,7 +33,7 @@ export function TransitionsPanel({ caseSummary }: { caseSummary: CaseSummary }) 
 
   return (
     <section aria-labelledby="transitions-heading">
-      <h2 id="transitions-heading">Transitions</h2>
+      <h2 id="transitions-heading">Available actions</h2>
       {transitionsQuery.isLoading && <p>Loading transitions…</p>}
       {transitionsQuery.error && (
         <p className={styles.error}>Transitions could not be loaded.</p>
@@ -49,16 +49,17 @@ export function TransitionsPanel({ caseSummary }: { caseSummary: CaseSummary }) 
             return (
               <li key={option.key} className={styles.transitionItem}>
                 <div>
-                  <strong>{option.key}</strong>
+                  <strong>{option.key.split("_").join(" ")}</strong>
                   {option.approval_required ? (
                     <span className={styles.meta}> · requires approval</span>
                   ) : null}
-                  <div className={styles.meta}>Moves from {option.from_state} to {option.to_state}</div>
+                  <div className={styles.meta}>{option.from_state.split("_").join(" ")} → {option.to_state.split("_").join(" ")}</div>
                   <div className={styles.guard}>
                     Guard: {option.allowed
                       ? "satisfied"
                       : "blocked" + (option.reason ? " — " + option.reason : "")}
                   </div>
+                  {option.reason === "missing_documents" && <p>Attach {typeof option.details?.classification === "string" ? "a " + option.details.classification + " document" : "the required document"} to continue. <a href="?view=documents">Open documents →</a></p>}
                   {option.approval_required ? (
                     <div className={styles.guard} role="note">
                       {option.approval_eligible

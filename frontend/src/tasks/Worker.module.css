@@ -1,0 +1,247 @@
+.page {
+  color: #192b44;
+  min-width: 0;
+}
+.heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0 0 1.45rem;
+}
+.page h1 {
+  color: #152841;
+  font-size: clamp(1.8rem, 3vw, 2.35rem);
+  line-height: 1.15;
+  letter-spacing: -0.045em;
+  margin: 0;
+}
+.page a {
+  color: #235b9a;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+.heading a {
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+.card,
+.detail,
+.queueCard {
+  min-width: 0;
+  border: 1px solid #d8e1ea;
+  background: white;
+  border-radius: 12px;
+}
+.detail {
+  margin-top: 1.3rem;
+  padding: 1.3rem;
+}
+.detail dl {
+  display: grid;
+  grid-template-columns: minmax(76px, auto) 1fr;
+  gap: 0.6rem 1.4rem;
+  margin: 0 0 1.4rem;
+}
+.detail dt,
+.meta,
+.type {
+  color: #52647b;
+}
+.detail dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.filters,
+.actions,
+.fieldset {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  padding: 1.15rem 1.3rem;
+}
+.filters {
+  border-bottom: 1px solid #e1e7ee;
+}
+.filters label,
+.label {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  font-weight: 650;
+  color: #41556d;
+}
+.page :is(select, input:not([type="checkbox"])) {
+  padding: 0.5rem 0.7rem;
+  min-height: 36px;
+  border: 1px solid #c5d0dd;
+  border-radius: 6px;
+  background: #fff;
+  color: #192b44;
+  font: inherit;
+}
+.filters select {
+  min-width: 9rem;
+}
+.page button {
+  min-height: 34px;
+  cursor: pointer;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid #bed0e2;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 650;
+  color: #214d7e;
+  background: white;
+}
+.page button:hover:enabled {
+  background: #f0f5fb;
+  border-color: #789fc5;
+}
+.page button:disabled {
+  cursor: default;
+  color: #758498;
+  background: #f6f8fa;
+}
+.detail button,
+.queueCard button:last-child {
+  color: #fff;
+  background: #215695;
+  border-color: #215695;
+}
+.detail button:hover:enabled,
+.queueCard button:last-child:hover:enabled {
+  color: #fff;
+  background: #1a467a;
+}
+.scroll {
+  overflow-x: auto;
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+.table th,
+.table td {
+  text-align: left;
+  padding: 0.85rem 1.15rem;
+  border-bottom: 1px solid #e7ecf1;
+  vertical-align: middle;
+}
+.table th {
+  color: #51647a;
+  font-size: 0.73rem;
+  background: #f6f8fa;
+  font-weight: 650;
+}
+.table tr:last-child td {
+  border-bottom: 0;
+}
+.table td:first-child a {
+  font-weight: 650;
+}
+.type,
+.meta {
+  display: block;
+  font-size: 0.8rem;
+  margin-top: 0.25rem;
+}
+.badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 650;
+  padding: 0.17rem 0.5rem;
+  border-radius: 20px;
+  background: #edf1f6;
+}
+.badge[data-status="open"] {
+  color: #1a5287;
+  background: #e5effb;
+}
+.badge[data-status="completed"] {
+  color: #216543;
+  background: #e6f2ec;
+}
+.capitalize,
+.badge {
+  text-transform: capitalize;
+}
+.errorRow td:first-child {
+  border-left: 3px solid #b46322;
+}
+.error,
+.overdue {
+  color: #963d23;
+}
+.error {
+  border: 1px solid #f1c3ba;
+  border-radius: 6px;
+  background: #fff5f2;
+  padding: 0.75rem;
+}
+.empty {
+  color: #55697e;
+  margin: 0;
+  padding: 2rem 1.3rem;
+}
+.transitionList {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 1rem;
+  margin: 0 0 1.4rem;
+  padding: 0;
+  list-style: none;
+}
+.queueCard {
+  padding: 1.15rem;
+  display: grid;
+  gap: 1rem;
+}
+.queueCard h2,
+.cardTitle {
+  font-size: 1.1rem;
+  color: #1b3452;
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+.queueCard[data-selected="true"] {
+  border-color: #5885ae;
+  box-shadow: inset 0 3px #356c9f;
+}
+.queueCard button[aria-pressed="true"] {
+  background: #e6f0f9;
+}
+.cardTitle {
+  padding: 1.15rem 1.3rem;
+}
+.fieldset {
+  margin: 0 1.25rem 1.25rem;
+  border: 1px solid #d6e0e9;
+  border-radius: 8px;
+}
+.fieldset legend {
+  font-size: 0.85rem;
+  color: #445b73;
+}
+@media (max-width: 650px) {
+  .heading {
+    align-items: start;
+  }
+  .table th,
+  .table td {
+    padding: 0.75rem;
+  }
+  .heading a {
+    white-space: nowrap;
+  }
+  .fieldset {
+    margin: 0 0.7rem 1rem;
+  }
+}
+.feedback {
+  margin: 0.75rem 1.25rem;
+  color: #225841;
+}

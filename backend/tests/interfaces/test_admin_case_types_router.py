@@ -20,6 +20,7 @@ from app.infrastructure.persistence.admin_case_types_http_dependencies import (
 from app.infrastructure.persistence.repositories import SqlCaseTypeRepository
 from app.interfaces.http.errors import domain_error_handler
 from app.interfaces.http.routers.admin_case_types import router
+from tests._live_roles import seed_live_roles
 
 TENANT_ID = UUID("11111111-1111-1111-1111-111111111111")
 ADMIN_ID = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
@@ -53,6 +54,14 @@ def _build_app(
     clock: Any,
 ) -> FastAPI:
     """Build a minimal app with the production provider composition."""
+    _run(
+        seed_live_roles(
+            session_factory,
+            tenant_id=TENANT_ID,
+            user_id=ADMIN_ID,
+            role_names=("process_admin",),
+        )
+    )
 
     async def _override_get_db() -> Any:
         async with session_factory() as session:

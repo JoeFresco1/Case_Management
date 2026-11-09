@@ -1,0 +1,45 @@
+.forms > p {
+  color: #65768c;
+}
+.forms > button {
+  display: inline-grid;
+  text-align: left;
+  margin: 4px 8px 8px 0;
+  min-width: 160px;
+  padding: 12px 15px;
+  background: #f5f8fd;
+  border-color: #d2deef;
+  text-transform: capitalize;
+}
+.forms > button[aria-pressed="true"] {
+  border-color: #3b6bc1;
+  background: #edf4ff;
+}
+.forms small {
+  color: #6b7c91;
+}
+.runtime {
+  border-top: 1px solid #d9e3ef;
+  margin-top: 18px;
+  padding-top: 16px;
+}
+.runtime fieldset {
+  margin: 12px 0;
+}
+.runtime label {
+  display: block;
+  font-weight: 600;
+  margin: 8px 0 4px;
+}
+.runtime input {
+  width: 100%;
+}
+.runtime button[type="submit"] {
+  background: #2656b8;
+  color: white;
+  padding: 9px 16px;
+}
+.runtime nav {
+  display: flex;
+  gap: 8px;
+}

@@ -57,6 +57,7 @@ from app.interfaces.http.errors import domain_error_handler
 from app.interfaces.http.idempotency import IdempotencyMiddleware
 from app.interfaces.http.routers.channels import router as channels_router
 from app.interfaces.http.routers.imports import router as imports_router
+from tests._live_roles import seed_live_roles
 
 TENANT_A = UUID("11111111-1111-1111-1111-111111111111")
 TENANT_B = UUID("22222222-2222-2222-2222-222222222222")
@@ -201,6 +202,10 @@ def _build_app(
     roles: tuple[str, ...] = ("process_admin",),
 ) -> FastAPI:
     """Build the imports+quarantine app with idempotency middleware enabled."""
+
+    # The SQL role repository is authoritative: an identity claim alone
+    # cannot grant the intended admin or intake rights in these tests.
+    _run(seed_live_roles(sm, tenant_id=tenant_id, user_id=user_id, role_names=roles))
 
     async def _override_get_db(request: Request) -> AsyncIterator[AsyncSession]:
         # why: share the middleware-owned session so the mutation and its

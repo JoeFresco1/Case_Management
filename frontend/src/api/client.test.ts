@@ -6,6 +6,14 @@ import {
   api,
 } from "./client";
 import type { CaseListItem, CaseSummary, Page } from "./types";
+import {
+  deleteSavedSearch,
+  runSavedSearch,
+  saveSearch,
+  searchCases,
+} from "./client/search";
+import { bundles } from "./client/documents";
+import { roles } from "./client/security";
 
 function mockFetchOnce(body: unknown, init?: { status?: number }): void {
   const status = init?.status ?? 200;
@@ -44,14 +52,12 @@ describe("api client (P01-US2 / FR-002)", () => {
       next_cursor: null,
       limit: 50,
     };
-    const fetchSpy = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify(page), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }),
-      );
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify(page), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
 
     const result = await api.listCases();
     expect(result.limit).toBe(50);
@@ -106,14 +112,12 @@ describe("api client (P01-US2 / FR-002)", () => {
       timeline: [],
       legal_hold: false,
     };
-    const fetchSpy = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify(summary), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }),
-      );
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify(summary), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
     const result = await api.getCase(summary.id);
     expect(result.reference).toBe("C-ACME-2026-000001");
     expect(result.assignee?.redacted).toBe(true);
@@ -127,7 +131,7 @@ describe("api client (P01-US2 / FR-002)", () => {
       {
         code: "forbidden",
         message: "case.read denied: no role grants this action",
-        correlation_id: "corr-1",
+        correlation_id: "request-correlation-1",
       },
       { status: 403 },
     );
@@ -141,9 +145,8 @@ describe("api client (P01-US2 / FR-002)", () => {
     const err = captured as ApiClientError;
     expect(err.status).toBe(403);
     expect(err.message).toContain("case.read denied");
-    // The client surfaces the body's ``code`` as ``correlationId`` on
-    // the error for backwards compatibility with earlier slices.
-    expect(err.correlationId).toBe("forbidden");
+    expect(err.code).toBe("forbidden");
+    expect(err.correlationId).toBe("request-correlation-1");
   });
 
   it("page-limit constants match the backend contract", () => {
@@ -161,11 +164,8 @@ describe("api client (P01-US2 / FR-002)", () => {
         ),
       );
     await api.listCases();
-    const headers = fetchSpy.mock.calls[0][1]?.headers as Record<
-      string,
-      string
-    >;
-    expect(headers["X-Correlation-Id"]).toMatch(
+    const headers = new Headers(fetchSpy.mock.calls[0][1]?.headers);
+    expect(headers.get("X-Correlation-Id")).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
     );
   });
@@ -173,12 +173,19 @@ describe("api client (P01-US2 / FR-002)", () => {
 
 describe("ApiClientError", () => {
   it("exposes status, message, correlationId and details", () => {
-    const err = new ApiClientError("boom", 422, "validation_failed", {
-      field: "title",
-    });
+    const err = new ApiClientError(
+      "boom",
+      422,
+      "request-correlation",
+      {
+        field: "title",
+      },
+      "validation_failed",
+    );
     expect(err.status).toBe(422);
     expect(err.message).toBe("boom");
-    expect(err.correlationId).toBe("validation_failed");
+    expect(err.correlationId).toBe("request-correlation");
+    expect(err.code).toBe("validation_failed");
     expect(err.details).toEqual({ field: "title" });
     expect(err).toBeInstanceOf(Error);
   });
@@ -190,39 +197,37 @@ describe("client basics", () => {
   });
 
   it("createCase posts JSON to /api/v1/cases", async () => {
-    const fetchSpy = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            id: "1",
-            tenant_id: "2",
-            reference: "C-ACME-2026-000001",
-            case_type_key: "ServiceRequest",
-            case_type_version_id: "3",
-            status: "open",
-            priority: "normal",
-            title: "x",
-            description: "",
-            data: {},
-            current_workflow_state: null,
-            version_token: 1,
-            created_at: "2026-08-31T12:00:00+00:00",
-            updated_at: "2026-08-31T12:00:00+00:00",
-            created_by: "9",
-            closed_at: null,
-            assignee: null,
-            queue: null,
-            sla_state: null,
-            participants: [],
-            open_tasks: [],
-            recent_documents: [],
-            recent_decisions: [],
-            timeline: [],
-          }),
-          { status: 201, headers: { "content-type": "application/json" } },
-        ),
-      );
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          id: "1",
+          tenant_id: "2",
+          reference: "C-ACME-2026-000001",
+          case_type_key: "ServiceRequest",
+          case_type_version_id: "3",
+          status: "open",
+          priority: "normal",
+          title: "x",
+          description: "",
+          data: {},
+          current_workflow_state: null,
+          version_token: 1,
+          created_at: "2026-08-31T12:00:00+00:00",
+          updated_at: "2026-08-31T12:00:00+00:00",
+          created_by: "9",
+          closed_at: null,
+          assignee: null,
+          queue: null,
+          sla_state: null,
+          participants: [],
+          open_tasks: [],
+          recent_documents: [],
+          recent_decisions: [],
+          timeline: [],
+        }),
+        { status: 201, headers: { "content-type": "application/json" } },
+      ),
+    );
     await api.createCase({
       case_type_key: "ServiceRequest",
       title: "x",
@@ -231,6 +236,79 @@ describe("client basics", () => {
     });
     const init = fetchSpy.mock.calls[0][1];
     expect(init?.method).toBe("POST");
+    expect(new Headers(init?.headers).get("Idempotency-Key")).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+    );
     expect(String(fetchSpy.mock.calls[0][0])).toBe("/api/v1/cases");
+  });
+
+  it("search POSTs do not get mutation keys, while saved-search writes do", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    fetchSpy
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ items: [] }), { status: 200 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: "saved" }), { status: 201 }),
+      );
+
+    await searchCases({ query: "intake" });
+    await saveSearch({ name: "My searches" });
+
+    expect(
+      new Headers(fetchSpy.mock.calls[0][1]?.headers).has("Idempotency-Key"),
+    ).toBe(false);
+    expect(
+      new Headers(fetchSpy.mock.calls[1][1]?.headers).get("Idempotency-Key"),
+    ).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+  });
+
+  it("read-only search and workflow posts omit idempotency keys", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ items: [] }), { status: 200 }),
+      );
+
+    await runSavedSearch("saved-id");
+
+    expect(String(fetchSpy.mock.calls[0][0])).toContain(
+      "/api/v1/search/saved/saved-id/run",
+    );
+    expect(
+      new Headers(fetchSpy.mock.calls[0][1]?.headers).has("Idempotency-Key"),
+    ).toBe(false);
+  });
+
+  it("delete clients resolve 204 and send idempotency keys", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    await expect(deleteSavedSearch("saved-id")).resolves.toBeUndefined();
+    await expect(roles.deleteRole("role-id")).resolves.toBeUndefined();
+
+    for (const [, init] of fetchSpy.mock.calls) {
+      expect(new Headers(init?.headers).get("Idempotency-Key")).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+      );
+    }
+  });
+
+  it("bearer redemption keeps its token as the only client credential", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ bundle_id: "bundle" }), { status: 200 }),
+      );
+
+    await bundles.redeemLink("opaque-token");
+
+    const headers = new Headers(fetchSpy.mock.calls[0][1]?.headers);
+    expect(String(fetchSpy.mock.calls[0][0])).toBe(
+      "/api/v1/bundles/links/redeem",
+    );
+    expect(headers.has("Idempotency-Key")).toBe(false);
   });
 });

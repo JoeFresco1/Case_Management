@@ -55,8 +55,9 @@ The plan, expressed as domain constraints the adapter must honor:
 6. **Pagination**: ``limit`` in ``[1, 200]`` (default 50), ``offset``
    ``>= 0``; cursor is ``"<offset>:<limit>"`` when a full page ships.
 7. **Audit**: every execution appends a :class:`SearchAuditEvent`
-   carrying the canonical query shape (sensitive values replaced by
-   ``ref`` markers) plus the result count -- never payload PHI.
+   carrying the query structure and result count. Free text and filter
+   operands are redacted; declared sensitive keys retain a safe ``ref``
+   marker, never the value.
 8. **Future engines** (Postgres FTS, Azure Cognitive Search,
    OpenSearch) replace the adapter behind the same ``SearchProvider``
    Protocol. The domain shapes and result-time rules do not change.
@@ -226,8 +227,8 @@ class SearchResult:
 class SearchAuditEvent:
     """Audit fact for one search execution (P06-US5/US6 / FM-032).
 
-    Carries the canonical query shape (sensitive values replaced by
-    ``ref`` markers, never content), the result count, and the actors.
+    Carries the query structure (free text and filter operands are
+    redacted), the result count, and the actors.
     ``saved_search_id`` is ``None`` for ad-hoc searches.
 
     Attributes:
@@ -258,13 +259,14 @@ def query_shape_for_audit(query: SearchQuery) -> dict[str, Any]:
 
     Returns:
         Dict with ``text_query``, ``filters`` (each ``field``/``op``
-        plus value, or a ``ref`` marker when the filter targets a
-        sensitive key), and ``sort``. Security staff can replay the
-        shape without ever seeing protected content.
+        and a redaction marker), and ``sort``. Sensitive data-field
+        markers retain the field reference; raw values are never stored.
 
     Failure mode: pure projection; never raises on unknown keys.
     """
     sensitive = set(query.sensitive_field_keys)
+    text_marker = {"redacted": True, "reason": "free_text"}
+    value_marker = {"redacted": True, "reason": "query_value"}
     shaped_filters: list[dict[str, Any]] = []
     for filt in query.filters:
         key = filt.field[len("data.") :] if filt.field.startswith("data.") else filt.field
@@ -280,9 +282,11 @@ def query_shape_for_audit(query: SearchQuery) -> dict[str, Any]:
                 }
             )
         else:
-            shaped_filters.append(filt.to_dict())
+            # why: a field can contain user-entered sensitive content
+            # even when its schema classification is incomplete.
+            shaped_filters.append({"field": filt.field, "op": filt.op, "value": dict(value_marker)})
     return {
-        "text_query": query.text_query,
+        "text_query": dict(text_marker) if query.text_query is not None else None,
         "filters": shaped_filters,
         "sort": [s.to_dict() for s in query.sort],
     }

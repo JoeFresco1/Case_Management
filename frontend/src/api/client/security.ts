@@ -3,7 +3,7 @@
  */
 import type { components } from "../types.gen";
 import type { RoleSummary } from "./types";
-import { request } from "./http";
+import { request, requestVoid } from "./http";
 
 /** Role and permission administration (P11-US4 / FM-048). */
 export const roles = {
@@ -51,7 +51,7 @@ export const roles = {
     ),
   /** Revoke a role assignment (immediate). */
   revokeAssignment: (roleId: string, userId: string) =>
-    request<void>(
+    requestVoid(
       `/admin/roles/${roleId}/assignments/${encodeURIComponent(userId)}`,
       {
         method: "DELETE",
@@ -60,7 +60,7 @@ export const roles = {
     ),
   /** Delete a non-reserved role. */
   deleteRole: (roleId: string) =>
-    request<void>(`/admin/roles/${roleId}`, {
+    requestVoid(`/admin/roles/${roleId}`, {
       method: "DELETE",
       headers: { "Idempotency-Key": crypto.randomUUID() },
     }),

@@ -4,6 +4,7 @@
  * parent regenerates ``types.gen.ts`` after the new GET endpoints land.
  * No mutation helper is exposed: v1 administration is inspection plus dry-run.
  */
+import { request } from "../api/client/http";
 
 export interface WorkflowSummary {
   id: string;
@@ -19,7 +20,12 @@ export interface WorkflowVersionProjection {
   workflow_version_id: string;
   version_number: number;
   status: "draft" | "published" | "retired";
-  states: Array<{ key: string; label: string; is_initial: boolean; is_terminal: boolean }>;
+  states: Array<{
+    key: string;
+    label: string;
+    is_initial: boolean;
+    is_terminal: boolean;
+  }>;
   transitions: Array<{
     key: string;
     from_state: string;
@@ -48,25 +54,25 @@ export interface SimulationResult {
     transition: string;
     from_state: string;
     to_state: string;
-    guards: Array<{ rule: Record<string, unknown>; inputs: Record<string, unknown>; result: boolean }>;
+    guards: Array<{
+      rule: Record<string, unknown>;
+      inputs: Record<string, unknown>;
+      result: boolean;
+    }>;
     actions_fired: Array<Record<string, unknown>>;
   }>;
-  blockers?: Array<{ kind: string; message: string; transition?: string; state?: string }>;
-}
-
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
-    ...init,
-    headers: { Accept: "application/json", ...(init?.headers ?? {}) },
-  });
-  if (!response.ok) {
-    throw new Error(`Workflow request failed (${response.status})`);
-  }
-  return (await response.json()) as T;
+  blockers?: Array<{
+    kind: string;
+    message: string;
+    transition?: string;
+    state?: string;
+  }>;
 }
 
 export function listWorkflows(): Promise<WorkflowSummary[]> {
-  return request<WorkflowSummary[]>("/api/v1/admin/workflows");
+  return request<WorkflowSummary[]>("/admin/workflows", {
+    headers: { Accept: "application/json" },
+  });
 }
 
 export function getWorkflowVersion(
@@ -74,13 +80,18 @@ export function getWorkflowVersion(
   versionNumber: number,
 ): Promise<WorkflowVersionProjection> {
   return request<WorkflowVersionProjection>(
-    `/api/v1/admin/workflows/${encodeURIComponent(workflowId)}/versions/${versionNumber}`,
+    `/admin/workflows/${encodeURIComponent(workflowId)}/versions/${versionNumber}`,
+    { headers: { Accept: "application/json" } },
   );
 }
 
-export function getWorkflowDiff(workflowId: string, versionNumber: number): Promise<WorkflowDiff> {
+export function getWorkflowDiff(
+  workflowId: string,
+  versionNumber: number,
+): Promise<WorkflowDiff> {
   return request<WorkflowDiff>(
-    `/api/v1/admin/workflows/${encodeURIComponent(workflowId)}/versions/${versionNumber}/diff`,
+    `/admin/workflows/${encodeURIComponent(workflowId)}/versions/${versionNumber}/diff`,
+    { headers: { Accept: "application/json" } },
   );
 }
 
@@ -90,7 +101,7 @@ export function simulateWorkflow(
   syntheticCase: Record<string, unknown>,
 ): Promise<SimulationResult> {
   return request<SimulationResult>(
-    `/api/v1/admin/workflows/${encodeURIComponent(workflowId)}/versions/${versionNumber}/simulate`,
+    `/admin/workflows/${encodeURIComponent(workflowId)}/versions/${versionNumber}/simulate`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },

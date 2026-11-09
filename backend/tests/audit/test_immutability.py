@@ -44,7 +44,6 @@ from app.domain.audit import (
     AUDIT_CORRECTION_RECORDED,
     CASE_CREATED,
     make_correction_payload,
-    payload_hash,
 )
 from app.domain.errors import ValidationFailed
 from app.infrastructure.persistence import models  # noqa: F401  registers tables
@@ -54,7 +53,7 @@ from app.infrastructure.persistence.audit_events import (
     install_audit_immutability_listener,
     reset_audit_immutability_listener,
 )
-from app.infrastructure.persistence.audit_outbox import SqlAuditEventStore
+from app.infrastructure.persistence.audit_outbox import SqlAuditEventStore, audit_dedupe
 from app.infrastructure.persistence.models import (
     AuditEvent as AuditEventRow,
 )
@@ -448,11 +447,6 @@ async def test_record_event__same_payload_and_correlation_id__is_idempotent(
         await _seed_tenant(session)
         await session.commit()
 
-    seen: set[tuple[UUID, str, str, str]] = set()
-
-    def _dedupe(tenant_id: UUID, event_type: str, correlation_id: str, phash: str) -> bool:
-        return (tenant_id, event_type, correlation_id, phash) in seen
-
     cmd = RecordAuditCommand(
         tenant_id=TENANT,
         actor_id=ACTOR,
@@ -466,25 +460,17 @@ async def test_record_event__same_payload_and_correlation_id__is_idempotent(
         payload={"ref": "C-AUDIT-2026-000001"},
         occurred_at=FIXED_NOW,
     )
-    key = (
-        cmd.tenant_id,
-        cmd.event_type,
-        cmd.correlation_id,
-        payload_hash(cmd.payload),
-    )
-
-    # First call: appends.
+    # First SQL-backed lookup finds no matching row, so the event is appended.
     async with session_factory() as session:
         store = SqlAuditEventStore(session)
-        result1 = await record_event(cmd, audit=store, dedupe=_dedupe)
+        result1 = await record_event(cmd, audit=store, dedupe=audit_dedupe(session))
         await session.commit()
     assert result1 is not DEDUPED_RETURNED_EVENT
-    seen.add(key)
 
-    # Second call with the same key: dedupe sentinel, no extra row.
+    # A new SQL-backed lookup observes the committed row and returns the replay sentinel.
     async with session_factory() as session:
         store = SqlAuditEventStore(session)
-        result2 = await record_event(cmd, audit=store, dedupe=_dedupe)
+        result2 = await record_event(cmd, audit=store, dedupe=audit_dedupe(session))
         await session.commit()
     assert result2 is DEDUPED_RETURNED_EVENT
 

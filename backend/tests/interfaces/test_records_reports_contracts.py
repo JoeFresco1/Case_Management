@@ -606,3 +606,94 @@ def test_custom_definition__invalid_spec__returns_422(
     # // then the closed vocabulary rejects the spec as unprocessable
     assert response.status_code == 422, response.text
     custom_reports.reset_default_repository()
+
+
+async def _seed_report_team(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> UUID:
+    """Create two tenants sharing a queue key and cases with distinct task histories."""
+    visible_id = uuid4()
+    async with session_factory() as session:
+        for tenant in (TENANT_A, TENANT_B):
+            version = await _seed_tenant_and_type(session, tenant_id=tenant)
+            session.add(
+                models.Queue(
+                    tenant_id=tenant,
+                    key="review",
+                    name="Review",
+                    member_user_ids=[str(ADMIN_A)],
+                    created_at=FIXED_NOW,
+                    updated_at=FIXED_NOW,
+                )
+            )
+            for seq, (queue, statuses) in enumerate(
+                (
+                    ("review", ("open", "open")),
+                    ("other", ("open",)),
+                    ("review", ("completed",)),
+                    ("review", ("open",)),
+                ),
+                start=1,
+            ):
+                case_id = await _seed_case(
+                    session,
+                    tenant_id=tenant,
+                    case_type_version_id=version,
+                    reference=f"C-TEST-2026-{seq:06d}",
+                )
+                case = await session.get(models.Case, case_id)
+                assert case is not None
+                case.updated_at = datetime.now(UTC)
+                if seq == 4:
+                    case.status = "closed"
+                elif seq == 1 and tenant == TENANT_A:
+                    visible_id = case_id
+                for status in statuses:
+                    session.add(
+                        models.Task(
+                            tenant_id=tenant,
+                            case_id=case_id,
+                            type="review",
+                            title="Review",
+                            status=status,
+                            assignee_queue_id=queue,
+                            due_at=FIXED_NOW,
+                            created_at=FIXED_NOW,
+                            updated_at=FIXED_NOW,
+                        )
+                    )
+        await session.commit()
+    return visible_id
+
+
+def test_custom_report__live_sql_queue_scope__renders_only_matching_open_case(
+    sql_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Duplicate tasks, other queues, closed cases and other tenants cannot inflate a report."""
+    # Given two tenants with the same review queue and overlapping task states.
+    visible_id = _run(_seed_report_team(sql_session_factory))
+    app = _build_app(sql_session_factory)
+    with TestClient(app) as client:
+        # When the administrator renders a current report with a date window.
+        definition = client.post(
+            "/api/v1/reports/custom-definitions",
+            json={
+                "key": "live-sql-case-count",
+                "name": "Case count",
+                "group_by": ["case.status"],
+                "aggregations": ["count"],
+                "time_window_hours": 24,
+            },
+            headers={"Idempotency-Key": "live-sql-case-count"},
+        )
+        assert definition.status_code == 201, definition.text
+        report = client.get(f"/api/v1/reports/custom/{definition.json()['id']}")
+        cases = client.get("/api/v1/reports/open-cases")
+        overdue = client.get("/api/v1/reports/overdue-tasks")
+    # Then the case is counted once and the open overdue tasks use UTC deadlines.
+    assert report.status_code == 200, report.text
+    assert [row["count"] for row in report.json()["items"]] == [1]
+    assert [row["case_id"] for row in cases.json()["items"]] == [str(visible_id)]
+    assert overdue.status_code == 200, overdue.text
+    assert all(row["overdue_seconds"] > 0 for row in overdue.json()["items"])
+    assert overdue.json()["total"] == 3

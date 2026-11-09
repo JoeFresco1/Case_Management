@@ -89,15 +89,22 @@ export function CreateCaseForm({ caseTypeKey, publishedSchema, onCreated }: Crea
     setSubmitError(null);
   }
 
+  // The published service request repeats the standard title and priority.
+  // Write compatible definitions from the same controls to keep both projections consistent.
+  const fields = publishedSchema.fields ?? [];
+  const sharesTitle = fields.some(f => f.key === "title" && f.type === "text");
+  const sharesPriority = fields.some(f => f.key === "priority" &&
+    (f.type === "text" || (f.type === "enum" && PRIORITIES.every(p => f.enum_values?.includes(p)))));
+  const caseData = { ...data, ...(sharesTitle ? { title } : {}), ...(sharesPriority ? { priority } : {}) };
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const nextErrors = validateCreateCase(title, priority, publishedSchema, data);
+    const nextErrors = validateCreateCase(title, priority, publishedSchema, caseData);
     setErrors(nextErrors);
     setSubmitError(null);
     if (Object.keys(nextErrors).length > 0) return;
     setSubmitting(true);
     try {
-      const result = await api.createCase({ case_type_key: caseTypeKey, title, description, priority, data });
+      const result = await api.createCase({ case_type_key: caseTypeKey, title, description, priority, data: caseData });
       setCreated(result);
       onCreated?.(result);
     } catch (error) {
@@ -109,7 +116,7 @@ export function CreateCaseForm({ caseTypeKey, publishedSchema, onCreated }: Crea
 
   return (
     <form onSubmit={submit} noValidate aria-label="Create case">
-      <h1>Create case</h1>
+      <h1 id="create-case-heading">Create case</h1>
       {submitError && <p role="alert">{submitError}</p>}
       {created && <p role="status">Case {created.reference} created.</p>}
       <label htmlFor="case-title">Title</label>
@@ -121,7 +128,7 @@ export function CreateCaseForm({ caseTypeKey, publishedSchema, onCreated }: Crea
       <select id="case-priority" value={priority} onChange={(event) => setPriority(event.target.value as Priority)}>
         {PRIORITIES.map((option) => <option key={option} value={option}>{option}</option>)}
       </select>
-      {(publishedSchema.fields ?? []).map((field) => {
+      {fields.filter(f => !(sharesTitle && f.key === "title") && !(sharesPriority && f.key === "priority")).map((field) => {
         const type = inputType(field);
         const error = errors[field.key];
         return (

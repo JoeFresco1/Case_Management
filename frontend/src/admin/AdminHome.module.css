@@ -1,0 +1,95 @@
+.page {
+  display: grid;
+  gap: clamp(24px, 4vw, 38px);
+  color: #192f49;
+}
+.header {
+  border-bottom: 1px solid #d6e1ec;
+  padding-bottom: clamp(18px, 3vw, 28px);
+}
+.header h1 {
+  margin: 0;
+  font-size: clamp(30px, 4vw, 42px);
+  font-weight: 670;
+  letter-spacing: -0.045em;
+  line-height: 1.14;
+  color: #162f4c;
+}
+.header p {
+  margin: 10px 0 0;
+  color: #52667b;
+  line-height: 1.55;
+}
+.group h2 {
+  margin: 0 0 13px;
+  font-size: 19px;
+  line-height: 1.35;
+  letter-spacing: -0.025em;
+}
+.grid {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 238px), 1fr));
+}
+.grid li {
+  display: flex;
+  min-width: 0;
+}
+.card {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 36px minmax(0, 1fr) 16px;
+  align-content: start;
+  width: 100%;
+  min-height: 106px;
+  padding: 18px;
+  border: 1px solid #d7e1ec;
+  border-radius: 11px;
+  background: white;
+  text-decoration: none;
+  color: inherit;
+}
+.card:hover {
+  border-color: #91aec9;
+  background: #fafcfe;
+}
+.card:focus-visible {
+  outline: 3px solid #6593cd;
+  outline-offset: 3px;
+}
+.icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  background: #edf3f9;
+  color: #2d5a85;
+}
+.copy {
+  display: grid;
+  gap: 6px;
+  padding-top: 2px;
+}
+.copy strong {
+  font-size: 16px;
+  line-height: 1.35;
+  font-weight: 650;
+}
+.copy > span {
+  font-size: 14px;
+  color: #506379;
+  line-height: 1.55;
+}
+.arrow {
+  padding-top: 2px;
+  color: #426e98;
+}
+@media (max-width: 550px) {
+  .card {
+    min-height: 0;
+  }
+}

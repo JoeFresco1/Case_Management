@@ -40,7 +40,8 @@ class SyntheticUser:
     ``key`` is what the dev-header IdP matches against ``X-Dev-User``;
     ``user_id`` is the row's UUID. ``roles`` mirror the policy in
     ``app.application.authorization``: intake can create cases, reviewer
-    can read them, supervisor can do everything.
+    can read them, supervisor can work cases, and process_admin can
+    manage tenant configuration.
     """
 
     key: str
@@ -85,6 +86,13 @@ def _synthetic_users(tenant_id: UUID) -> tuple[SyntheticUser, ...]:
             email="sam.supervisor@example.test",
             roles=("supervisor", "case.create", "case.read", "case.admin"),
             user_id=_stable("supervisor"),
+        ),
+        SyntheticUser(
+            key="process_admin",
+            display_name="Pat Process Admin",
+            email="pat.process_admin@example.test",
+            roles=("process_admin",),
+            user_id=_stable("process_admin"),
         ),
     )
 

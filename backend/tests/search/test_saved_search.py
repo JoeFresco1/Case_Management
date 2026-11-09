@@ -401,11 +401,49 @@ async def test_save_and_run__same_filtered_set_with_sort(
     # exactly the urgent ones.
     assert result_first.total_considered == 2
     assert len(result_first.items) == 2
-    # The canonical query shape is preserved on the saved row.
-    assert saved.query_shape["filters"] == [{"field": "priority", "op": "eq", "value": "urgent"}]
+    # The executable saved query retains its operand; the audit shape redacts it.
+    assert saved.filters == (("priority", "eq", "urgent"),)
+    assert saved.query_shape["filters"] == [
+        {
+            "field": "priority",
+            "op": "eq",
+            "value": {"redacted": True, "reason": "query_value"},
+        }
+    ]
     assert saved.query_shape["sort"] == [{"field": "reference", "direction": "asc"}]
     # Three audit rows total: one for the save, two for the runs.
     assert len(audit_repo.rows) == 3
+
+
+def test_saved_search_create__audit_shape_redacts_query_values() -> None:
+    # given: executable saved-search values may contain private content
+    text_value = "client name@example.test"
+    filter_value = "123-45-6789"
+    # when: the saved-search aggregate is created
+    saved = SavedSearch.create(
+        tenant_id=ACME_TENANT,
+        owner_user_id=ALICE,
+        name="private lookup",
+        text_query=text_value,
+        filters=(("data.ssn", "eq", filter_value),),
+        now=FIXED_NOW,
+    )
+    # then: only the audit projection redacts values; the saved query stays executable
+    assert saved.query_shape == {
+        "text_query": {"redacted": True, "reason": "free_text"},
+        "filters": [
+            {
+                "field": "data.ssn",
+                "op": "eq",
+                "value": {"redacted": True, "reason": "query_value"},
+            }
+        ],
+        "sort": [],
+    }
+    assert saved.text_query == text_value
+    assert saved.filters == (("data.ssn", "eq", filter_value),)
+    assert text_value not in str(saved.query_shape)
+    assert filter_value not in str(saved.query_shape)
 
 
 # ---------------------------------------------------------------------------
@@ -462,10 +500,17 @@ async def test_view_search_audit__security_staff_sees_shape_and_count(
     # filter by ``saved_search_id`` and ``actor_id``.
     assert len(page.items) == 2
     for entry in page.items:
-        # Shape carries both filters and sort so the security
-        # administrator can replay the saved query.
+        # Shape carries the searchable structure without raw operands.
         assert "filters" in entry.query_shape
         assert "sort" in entry.query_shape
+        assert entry.query_shape["filters"] == [
+            {
+                "field": "priority",
+                "op": "eq",
+                "value": {"redacted": True, "reason": "query_value"},
+            }
+        ]
+        assert "urgent" not in str(entry.query_shape)
         # Timestamp is ISO-8601 so it sorts and parses cleanly.
         assert entry.occurred_at.startswith("2026-")
         # Run events carry a non-zero result count; the save event
@@ -787,6 +832,37 @@ async def test_sql_saved_search_repository__cross_tenant_get_returns_none(
         assert same is not None
         cross = await repo.get(BETA_TENANT, saved.id)
         assert cross is None, "cross-tenant leak: tenant B saw tenant A's saved search"
+
+
+async def test_sql_saved_search_repository__safe_shape_preserves_replay_fields(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Persisting safe audit metadata must retain executable saved-query columns."""
+    text_value = "client name@example.test"
+    filter_value = "123-45-6789"
+    async with session_factory() as session:
+        await _seed(session, ACME_TENANT, "ACME")
+        repository = SqlSavedSearchRepository(session)
+        saved = SavedSearch.create(
+            tenant_id=ACME_TENANT,
+            owner_user_id=ALICE,
+            name="private lookup",
+            text_query=text_value,
+            filters=(("data.ssn", "eq", filter_value),),
+            now=FIXED_NOW,
+        )
+        await repository.add(saved)
+        await session.commit()
+
+    async with session_factory() as session:
+        loaded = await SqlSavedSearchRepository(session).get(ACME_TENANT, saved.id)
+
+    assert loaded is not None
+    assert loaded.text_query == text_value
+    assert loaded.filters == (("data.ssn", "eq", filter_value),)
+    assert loaded.query_shape == saved.query_shape
+    assert text_value not in str(loaded.query_shape)
+    assert filter_value not in str(loaded.query_shape)
 
 
 async def test_sql_audit_repository__filters_by_tenant(

@@ -18,7 +18,7 @@ filter on every read).
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
@@ -42,6 +42,8 @@ from app.infrastructure.persistence.models import (
 from app.infrastructure.persistence.models import (
     Outbox as OutboxRow,
 )
+
+_AuditDedupe = Callable[[UUID, str, str, str], Awaitable[bool]]
 
 # ---------------------------------------------------------------------------
 # Cursor codec (P09-US4 / AGENTS.md §17.1)
@@ -97,7 +99,7 @@ def decode_timeline_cursor(cursor: str) -> tuple[datetime, UUID]:
 
 def _make_dedupe(
     session: AsyncSession,
-) -> Any:
+) -> _AuditDedupe:
     """Build a ``Dedupe`` callable bound to ``session``.
 
     Used by ``application.audit.record_event`` to dedupe before
@@ -107,9 +109,9 @@ def _make_dedupe(
     the current transaction, so we cannot move this lookup to the
     application layer without round-tripping the storage.
 
-    The callable returns ``True`` when a row with the same idempotency
-    key is already staged in the session. The application layer
-    treats that as "silent no-op" (AGENTS.md §10).
+    The asynchronous callable returns ``True`` when a row with the same
+    idempotency key exists in the session. The application awaits this
+    SQL lookup before deciding whether to append (AGENTS.md §10).
     """
 
     async def dedupe(
@@ -136,7 +138,7 @@ def _make_dedupe(
     return dedupe
 
 
-def audit_dedupe(session: AsyncSession) -> Any:
+def audit_dedupe(session: AsyncSession) -> _AuditDedupe:
     """Public wrapper for ``_make_dedupe``.
 
     Why exposed at module level: the router wires it directly to the

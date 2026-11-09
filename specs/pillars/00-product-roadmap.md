@@ -135,3 +135,4 @@ These are the questions that affect more than one pillar and have not been resol
 3. **Notifications** — first slice records communication *intents*; outbound channels (email, SMS, fax, portal) are P14 territory. **Open** — no ADR yet; tracked for P14.
 4. **AI assistance surface** — decided: single `recommend()` verb (`AIAdvisor`), no-op local stub, Azure OpenAI placeholder; never authoritative. See [ADR-012](../../docs/decisions/ADR-012-ai-boundary.md).
 5. **Public API vs. internal API** — decided: internal API only in the first slice; public API comes with hardening. See [ADR-022](../../docs/decisions/ADR-022-public-vs-internal-api.md).
+6. **Review remediation boundaries** — decided: persisted local identity and live role authority, exact idempotency exceptions, redacted search audit shapes, and durable webhook enqueue retry. See [ADR-048](../../docs/decisions/ADR-048-review-remediation-boundaries.md).

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { demoWorkspaces } from "./demoWorkspaces";
 import styles from "./Banner.module.css";
 
 interface HealthResponse {
@@ -50,6 +51,7 @@ export function Banner({ apiBase = "/api/v1" }: BannerProps) {
     return null;
   }
 
+  const workspaces = synthetic && demoWorkspaces();
   return (
     <div
       className={styles.banner}
@@ -58,6 +60,32 @@ export function Banner({ apiBase = "/api/v1" }: BannerProps) {
       aria-live="polite"
     >
       <span className={styles.label}>SYNTHETIC ENVIRONMENT</span>
+      {workspaces && (
+        <select
+          aria-label="Synthetic demo role"
+          className={styles.actor}
+          value={
+            window.location.port === "5175"
+              ? "admin"
+              : window.location.port === "5174"
+                ? "intake"
+                : "supervisor"
+          }
+          onChange={(e) => {
+            const origin =
+              e.target.value === "admin"
+                ? workspaces.admin
+                : e.target.value === "intake"
+                  ? workspaces.intake
+                  : workspaces.supervisor;
+            window.location.assign(origin + (e.target.value === "admin" ? "/admin" : "/home"));
+          }}
+        >
+          <option value="supervisor">Supervisor</option>
+          <option value="intake">Intake</option>
+          <option value="admin">Administrator</option>
+        </select>
+      )}
       <span className={styles.message}>
         No real data. Do not load enterprise records.
       </span>

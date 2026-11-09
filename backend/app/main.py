@@ -10,21 +10,30 @@ import asyncio
 import contextlib
 from functools import lru_cache
 from pathlib import Path
+from typing import Any, cast
 
 import structlog
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import Response
 
 from app.application.sla.scheduler import SlaScannerScheduler
 from app.config import Settings, get_settings
 from app.db import get_sessionmaker
-from app.deps import CorrelationContext
+from app.deps import (
+    CorrelationContext,
+    SystemClock,
+    UserContext,
+    clear_local_users,
+    register_local_user,
+)
 from app.domain.errors import DomainError
-from app.domain.ports import SecretProvider
+from app.domain.ports import OutboundDeliveryTransport, SecretProvider
 from app.infrastructure.messaging.local_message_bus import (
     LocalInProcessMessageBus,
 )
@@ -56,6 +65,7 @@ from app.infrastructure.persistence.admin_workflows_http_dependencies import (
 from app.infrastructure.persistence.audit_http_dependencies import (
     SqlAuditHttpDependencyProvider,
 )
+from app.infrastructure.persistence.audit_outbox import SqlAuditEventStore
 from app.infrastructure.persistence.capture_http_dependencies import (
     SqlCaptureHttpDependencyProvider,
 )
@@ -89,6 +99,7 @@ from app.infrastructure.persistence.imports_http_dependencies import (
 from app.infrastructure.persistence.migration_http_dependencies import (
     SqlMigrationHttpDependencyProvider,
 )
+from app.infrastructure.persistence.models import User as UserRow
 from app.infrastructure.persistence.participant_http_dependencies import (
     SqlParticipantHttpDependencyProvider,
 )
@@ -97,6 +108,10 @@ from app.infrastructure.persistence.queue_http_dependencies import (
 )
 from app.infrastructure.persistence.reports_http_dependencies import (
     SqlReportsHttpDependencyProvider,
+)
+from app.infrastructure.persistence.repositories import (
+    SqlOutboundDeliveryRepository,
+    SqlWebhookSubscriptionRepository,
 )
 from app.infrastructure.persistence.retention_http_dependencies import (
     SqlRetentionHttpDependencyProvider,
@@ -128,6 +143,7 @@ from app.infrastructure.system.local_system_adapters import (
 )
 from app.infrastructure.telemetry import correlation as telemetry_ctx
 from app.infrastructure.telemetry.structured_logging import configure_structlog
+from app.infrastructure.webhooks.httpx_transport import HttpXOutboundTransport
 from app.interfaces.http.errors import ErrorResponse, domain_error_handler
 from app.interfaces.http.idempotency import IdempotencyMiddleware
 from app.interfaces.http.routers.admin_case_types import (
@@ -271,6 +287,83 @@ def _install_audit_guards() -> None:
 
     install_audit_immutability_listener()
     install_audit_immutability_execute_listener(get_engine())
+
+
+async def _hydrate_local_identity_registry(
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """Load persisted local users so a separately started server accepts seed keys.
+
+    The seed CLI and API server are separate processes. The in-memory
+    registry populated by the CLI therefore cannot be the server's identity
+    source; persisted non-system users are reloaded before requests are
+    served. A database error propagates so the local API never starts with a
+    partial identity registry.
+    """
+    clear_local_users()
+    async with sessionmaker() as session:
+        rows = (
+            await session.execute(
+                select(UserRow)
+                .where(UserRow.is_system.is_(False))
+                .order_by(UserRow.tenant_id.asc(), UserRow.key.asc())
+            )
+        ).scalars()
+        for row in rows:
+            register_local_user(
+                UserContext(
+                    user_id=row.id,
+                    tenant_id=row.tenant_id,
+                    display_name=row.display_name,
+                    roles=tuple(row.roles or ()),
+                ),
+                key=row.key,
+            )
+
+
+async def _register_webhook_catalog_subscriber(
+    bus: LocalInProcessMessageBus,
+    *,
+    sessionmaker: async_sessionmaker[AsyncSession],
+    secret_provider: SecretProvider,
+    transport: OutboundDeliveryTransport,
+) -> None:
+    """Register durable outbound delivery creation before the outbox drains.
+
+    Each event gets its own SQL transaction. Database failures propagate to
+    the outbox dispatcher, which leaves the source event pending for retry;
+    transport failures are recorded on the delivery row for the webhook
+    dispatcher to retry with its backoff policy.
+    """
+    from app.application.webhooks.outbound import (  # noqa: PLC0415
+        DeliveryService,
+        make_catalog_subscriber,
+    )
+
+    async def _receive(event: dict[str, Any]) -> None:
+        async with sessionmaker() as session:
+            subscriber = make_catalog_subscriber(
+                delivery_service_factory=lambda: DeliveryService(
+                    delivery_repo=SqlOutboundDeliveryRepository(session),
+                    subscription_repo=SqlWebhookSubscriptionRepository(session),
+                    transport=transport,
+                    secret_provider=secret_provider,
+                    clock=SystemClock(),
+                ),
+                subscription_repo=SqlWebhookSubscriptionRepository(session),
+                delivery_repo=SqlOutboundDeliveryRepository(session),
+                audit=SqlAuditEventStore(session),
+                clock=SystemClock(),
+            )
+            try:
+                await subscriber(event)
+                await session.commit()
+            except Exception:
+                # why: roll back this event's unit of work before surfacing a retryable failure.
+                await session.rollback()
+                raise
+
+    await bus.subscribe(_receive)
 
 
 def create_app() -> FastAPI:  # noqa: PLR0915
@@ -504,6 +597,7 @@ def create_app() -> FastAPI:  # noqa: PLR0915
     webhook_task: asyncio.Task[None] | None = None
     sla_scheduler: SlaScannerScheduler | None = None
     bus = LocalInProcessMessageBus()
+    webhook_transport = HttpXOutboundTransport()
 
     @app.on_event("startup")
     async def _startup() -> None:
@@ -544,6 +638,18 @@ def create_app() -> FastAPI:  # noqa: PLR0915
                 app_env=settings.app_env,
             )
 
+        if settings.is_local():
+            await _hydrate_local_identity_registry(get_sessionmaker())
+
+        # Register before starting the outbox tick: a row dispatched on its
+        # first tick must already have the outbound webhook catalog consumer.
+        await _register_webhook_catalog_subscriber(
+            bus,
+            sessionmaker=get_sessionmaker(),
+            secret_provider=cast(SecretProvider, getattr(app.state, "secret_provider", None)),
+            transport=webhook_transport,
+        )
+
         if settings.outbox_dispatcher_enabled:
             dispatcher = OutboxDispatcher(
                 sessionmaker=get_sessionmaker(),
@@ -575,13 +681,10 @@ def create_app() -> FastAPI:  # noqa: PLR0915
             from app.infrastructure.webhooks.delivery_dispatcher import (  # noqa: PLC0415
                 WebhookDeliveryDispatcher,
             )
-            from app.infrastructure.webhooks.httpx_transport import (  # noqa: PLC0415
-                HttpXOutboundTransport,
-            )
 
             webhook_dispatcher = WebhookDeliveryDispatcher(
                 sessionmaker=get_sessionmaker(),
-                transport=HttpXOutboundTransport(),
+                transport=webhook_transport,
                 secret_provider=getattr(app.state, "secret_provider", None),
                 sleep_seconds=float(settings.webhook_dispatch_interval_seconds),
             )
@@ -615,6 +718,7 @@ def create_app() -> FastAPI:  # noqa: PLR0915
             outbox_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await outbox_task
+        await webhook_transport.aclose()
 
     app.state.message_bus = bus
     return app

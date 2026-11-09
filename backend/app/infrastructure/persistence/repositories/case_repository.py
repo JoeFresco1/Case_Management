@@ -42,6 +42,7 @@ from app.infrastructure.persistence.mapping import (
 )
 from app.infrastructure.persistence.models import Case as CaseRow
 from app.infrastructure.persistence.models import ReferenceFormat as ReferenceFormatRow
+from app.infrastructure.persistence.models import Task as TaskRow
 from app.infrastructure.persistence.models import Tenant as TenantRow
 
 # Template token -> regex fragment used to recover the highest issued
@@ -170,7 +171,11 @@ class SqlCaseRepository:
         for _ in range(_MAX_SEQ_PROBE_ATTEMPTS):
             rendered = ReferenceFormat(tenant_id=tenant_id, template=template).render(
                 tenant_short=tenant.key,
-                type_key=type_key or "UNKNOWN",
+                # CaseType keys are stable business slugs (for example,
+                # ServiceRequest or review-case); reference tokens require
+                # uppercase ASCII with underscores. Normalize at this port
+                # so seed, intake, split, forms, and imports agree.
+                type_key=(type_key or "UNKNOWN").upper().replace("-", "_"),
                 now=now,
                 sequence=seq,
             )
@@ -251,24 +256,30 @@ class SqlCaseRepository:
         queue_keys: tuple[str, ...],
         limit: int = 200,
     ) -> Sequence[Case]:
-        """Return open cases tied to any queue in ``queue_keys``.
+        """Return the freshest open cases with open work in these tenant queues.
 
-        The query joins ``cases`` to ``tasks`` (the queue-to-case
-        bridge) on ``tasks.case_id = cases.id``,
-        ``tasks.assignee_queue_id IN :queue_keys``, and
-        ``cases.status = 'open'``. Tenant isolation is enforced by
-        ``WHERE cases.tenant_id = :tenant_id``. Cross-tenant queue
-        keys are silently dropped by the IN clause.
-
-        Implementation note (FM-051 H1 slice): this method requires
-        the ``tasks`` SQL adapter to be in place (T063). Until then,
-        the router surfaces ``DependencyUnavailable`` so the
-        application layer can be exercised through in-memory fakes
-        without a misleading green CI.
+        An empty queue set returns no rows. Multiple matching tasks still represent
+        one case; the correlated EXISTS applies membership before the result limit.
         """
-        raise DependencyUnavailable(
-            "SqlCaseRepository.list_open_for_queues is not yet wired (T063 / P12 H1)"
+        if not queue_keys:
+            return []
+        assigned_task = (
+            select(TaskRow.id)
+            .where(
+                TaskRow.tenant_id == tenant_id,
+                TaskRow.case_id == CaseRow.id,
+                TaskRow.status == "open",
+                TaskRow.assignee_queue_id.in_(queue_keys),
+            )
+            .exists()
         )
+        stmt = (
+            select(CaseRow)
+            .where(CaseRow.tenant_id == tenant_id, CaseRow.status == "open", assigned_task)
+            .order_by(CaseRow.updated_at.desc(), CaseRow.id)
+            .limit(limit)
+        )
+        return [case_to_domain(row) for row in (await self._s.scalars(stmt)).all()]
 
 
 __all__ = ["SqlCaseRepository"]

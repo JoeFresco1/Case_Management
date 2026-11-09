@@ -1,0 +1,94 @@
+.studio > header {
+  margin-bottom: 25px;
+}
+.studio header > a {
+  font-size: 12px;
+  text-decoration: none;
+}
+.studio h1 {
+  margin-top: 10px;
+}
+.studio p {
+  color: #60758c;
+}
+.layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 36%) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.builder,
+.results {
+  min-width: 0;
+  background: white;
+  border: 1px solid #dae3ed;
+  padding: 22px;
+  border-radius: 12px;
+}
+.studio h2 {
+  font-size: 20px;
+  margin: 0 0 18px;
+}
+.studio label {
+  display: grid;
+  gap: 5px;
+  margin: 12px 0;
+  font-weight: 600;
+  font-size: 13px;
+}
+.studio textarea {
+  font:
+    13px/1.7 Consolas,
+    monospace;
+  resize: vertical;
+}
+.studio select {
+  text-transform: capitalize;
+}
+.switch {
+  display: flex;
+  gap: 6px;
+}
+.switch button[aria-pressed="true"],
+.primary {
+  background: #2859b9 !important;
+  color: white !important;
+}
+.studio details {
+  margin: 16px 0;
+  padding-top: 12px;
+  border-top: 1px solid #e2e8f0;
+}
+.studio summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+}
+.saved {
+  display: block;
+  margin-top: 7px;
+  width: 100%;
+  text-align: left;
+}
+.table {
+  overflow: auto;
+}
+.table table {
+  width: 100%;
+}
+.studio code {
+  overflow-wrap: anywhere;
+  font-size: 11px;
+}
+.empty {
+  padding: 35px 0;
+}
+.empty h3 {
+  color: #294565;
+  font-size: 23px;
+}
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}

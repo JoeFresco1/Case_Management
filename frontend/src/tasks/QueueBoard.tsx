@@ -1,9 +1,10 @@
+import { Link } from "react-router-dom";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api, ApiClientError } from "../api/client";
 import type { components } from "../api/types.gen";
-import styles from "../cases/CaseWorkspace.module.css";
+import styles from "./Worker.module.css";
 
 type QueueSummary = components["schemas"]["QueueSummary"];
 type QueueTaskView = components["schemas"]["QueueTaskView"];
@@ -29,7 +30,7 @@ interface DelegateState {
  */
 export function QueueBoard() {
   const queryClient = useQueryClient();
-  const [selectedQueue, setSelectedQueue] = useState<string | null>(null);
+  const [requestedQueue, setSelectedQueue] = useState<string | null>(null);
   const [delegate, setDelegate] = useState<DelegateState>({
     delegateUserId: "",
     untilDays: "7",
@@ -42,6 +43,11 @@ export function QueueBoard() {
     staleTime: 15_000,
   });
 
+  const queues: QueueSummary[] = queuesQuery.data ?? [];
+  const selectedQueue =
+    queues.find((queue) => queue.key === requestedQueue)?.key ??
+    queues[0]?.key ??
+    null;
   const tasksQuery = useQuery({
     queryKey: ["queues", "tasks", selectedQueue],
     queryFn: () => api.queues.listQueueTasks(selectedQueue as string),
@@ -107,33 +113,34 @@ export function QueueBoard() {
       </p>
     );
 
-  const queues: QueueSummary[] = queuesQuery.data ?? [];
   const tasks: QueueTaskView[] = tasksQuery.data ?? [];
   const lastDelegation = delegateTasks.data;
 
   return (
-    <section aria-labelledby="queue-board-heading">
-      <h1 id="queue-board-heading">Queue board</h1>
-      <p className={styles.meta}>
-        Claim, release, and delegate work with due-date aging context.
-        Delegation is always time-bounded — the cover expiry is shown
-        after each delegation and recorded in audit.
-      </p>
-
+    <section className={styles.page} aria-labelledby="queue-board-heading">
+      <header className={styles.heading}>
+        <h1 id="queue-board-heading">Queue board</h1>
+        <Link to="/tasks">
+          Task inbox <span aria-hidden="true">→</span>
+        </Link>
+      </header>
       {queues.length === 0 ? (
         <p className={styles.empty}>No queues are visible to you.</p>
       ) : (
         <ul className={styles.transitionList}>
           {queues.map((queue) => (
-            <li key={queue.id} className={styles.transitionItem}>
+            <li
+              key={queue.id}
+              className={styles.queueCard}
+              data-selected={queue.key === selectedQueue}
+            >
               <div>
-                <strong>
-                  <code>{queue.key}</code>
-                </strong>{" "}
-                — {queue.name}
+                <h2>{queue.name}</h2>
+                <code className={styles.type}>{queue.key}</code>
                 <div className={styles.meta}>
-                  {queue.assignment_policy} ·{" "}
-                  {queue.member_user_ids.length} member(s)
+                  {queue.assignment_policy.replace(/_/g, " ")} ·{" "}
+                  {queue.member_user_ids.length}{" "}
+                  {queue.member_user_ids.length === 1 ? "member" : "members"}
                 </div>
               </div>
               <div>
@@ -161,6 +168,12 @@ export function QueueBoard() {
         </ul>
       )}
 
+      {claim.data && (
+        <p role="status" className={styles.feedback}>
+          Task claimed in {claim.data.queue_key}.{" "}
+          <Link to={`/tasks/${claim.data.task_id}`}>Open task</Link>
+        </p>
+      )}
       {claim.error instanceof ApiClientError ? (
         <p className={styles.error} role="alert">
           {claim.error.message}
@@ -168,8 +181,11 @@ export function QueueBoard() {
       ) : null}
 
       {selectedQueue !== null ? (
-        <section aria-label={`Tasks on ${selectedQueue}`}>
-          <h2>
+        <section
+          className={styles.card}
+          aria-label={`Tasks on ${selectedQueue}`}
+        >
+          <h2 className={styles.cardTitle}>
             Open tasks on <code>{selectedQueue}</code>
           </h2>
           {tasksQuery.isLoading ? (
@@ -184,83 +200,104 @@ export function QueueBoard() {
             <p className={styles.empty}>No open work on this queue.</p>
           ) : (
             <>
-              <table className={styles.table}>
-                <thead>
-                  <tr>
-                    <th aria-label="Select">✓</th>
-                    <th>Title</th>
-                    <th>Status</th>
-                    <th>Age / due</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tasks.map((task) => {
-                    const checked = selectedTasks.includes(task.task_id);
-                    return (
-                      <tr
-                        key={task.task_id}
-                        className={
-                          task.aging.is_overdue ? styles.errorRow : undefined
-                        }
-                      >
-                        <td>
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={(event) =>
-                              setSelectedTasks((prev) =>
-                                event.target.checked
-                                  ? [...prev, task.task_id]
-                                  : prev.filter((id) => id !== task.task_id),
-                              )
-                            }
-                            aria-label={`Select ${task.title}`}
-                          />
-                        </td>
-                        <td>
-                          <a href={`/cases/${task.case_id}`}>{task.title}</a>
-                          <div className={styles.meta}>
-                            <code>{task.type}</code>
-                          </div>
-                        </td>
-                        <td>{task.status}</td>
-                        <td>
-                          {task.aging.is_overdue ? (
-                            <span className={styles.error}>
-                              Overdue
-                              {task.aging.overdue_by_seconds !== null &&
-                              task.aging.overdue_by_seconds !== undefined
-                                ? ` by ${formatDuration(task.aging.overdue_by_seconds)}`
-                                : ""}
+              <div className={styles.scroll}>
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th aria-label="Select">✓</th>
+                      <th>Title</th>
+                      <th>Status</th>
+                      <th>Age / due</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tasks.map((task) => {
+                      const checked = selectedTasks.includes(task.task_id);
+                      return (
+                        <tr
+                          key={task.task_id}
+                          className={
+                            task.aging.is_overdue ? styles.errorRow : undefined
+                          }
+                        >
+                          <td>
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(event) =>
+                                setSelectedTasks((prev) =>
+                                  event.target.checked
+                                    ? [...prev, task.task_id]
+                                    : prev.filter((id) => id !== task.task_id),
+                                )
+                              }
+                              aria-label={`Select ${task.title}`}
+                            />
+                          </td>
+                          <td>
+                            <Link
+                              to={`/cases/${task.case_id}`}
+                              aria-label={`Open case for ${task.title}`}
+                            >
+                              {task.title}
+                            </Link>
+                            <div className={styles.meta}>
+                              {task.type}
+                            </div>
+                          </td>
+                          <td>
+                            <span
+                              className={styles.badge}
+                              data-status={task.status}
+                            >
+                              {task.status}
                             </span>
-                          ) : task.aging.due_in_seconds !== null &&
-                            task.aging.due_in_seconds !== undefined ? (
-                            <span>
-                              Due in {formatDuration(task.aging.due_in_seconds)}
-                            </span>
-                          ) : (
-                            <span>
-                              Age {formatDuration(task.aging.age_seconds)}
-                            </span>
-                          )}
-                        </td>
-                        <td>
-                          <button
-                            type="button"
-                            disabled={release.isPending}
-                            onClick={() => release.mutate(task.task_id)}
-                            title="Release this task back to its queue"
-                          >
-                            Release
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                          </td>
+                          <td>
+                            {task.aging.is_overdue ? (
+                              <span className={styles.overdue}>
+                                Overdue
+                                {task.aging.overdue_by_seconds !== null &&
+                                task.aging.overdue_by_seconds !== undefined
+                                  ? ` by ${formatDuration(task.aging.overdue_by_seconds)}`
+                                  : ""}
+                              </span>
+                            ) : task.aging.due_in_seconds !== null &&
+                              task.aging.due_in_seconds !== undefined ? (
+                              <span>
+                                Due in{" "}
+                                {formatDuration(task.aging.due_in_seconds)}
+                              </span>
+                            ) : (
+                              <span>
+                                Age {formatDuration(task.aging.age_seconds)}
+                              </span>
+                            )}
+                          </td>
+                          <td>
+                            <button
+                              type="button"
+                              disabled={release.isPending}
+                              onClick={() => release.mutate(task.task_id)}
+                              title="Release this task back to its queue"
+                            >
+                              Release
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
 
+              {bulk.data && (
+                <p className={styles.feedback} role="status">
+                  Updated {bulk.data.handled.length} · Skipped{" "}
+                  {bulk.data.skipped.length}
+                </p>
+              )}
               <div className={styles.actions}>
                 <button
                   type="button"
@@ -331,7 +368,10 @@ export function QueueBoard() {
                   type="button"
                   disabled={
                     selectedTasks.length === 0 ||
-                    !delegate.delegateUserId ||
+                    !delegate.delegateUserId.trim() ||
+                    !Number.isInteger(Number(delegate.untilDays)) ||
+                    Number(delegate.untilDays) < 1 ||
+                    Number(delegate.untilDays) > 90 ||
                     delegateTasks.isPending
                   }
                   onClick={() => delegateTasks.mutate()}
@@ -350,6 +390,13 @@ export function QueueBoard() {
                 ) : null}
               </fieldset>
 
+              {release.isError && (
+                <p className={styles.error} role="alert">
+                  {release.error instanceof ApiClientError
+                    ? release.error.message
+                    : "Unable to release task."}
+                </p>
+              )}
               {bulk.error instanceof ApiClientError ? (
                 <p className={styles.error} role="alert">
                   {bulk.error.message}

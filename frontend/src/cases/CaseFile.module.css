@@ -1,0 +1,164 @@
+.file {
+  display: grid;
+  gap: 18px;
+}
+.cover {
+  border-radius: 15px;
+  padding: 20px clamp(18px, 3vw, 38px) 26px;
+  background: linear-gradient(115deg, #142d50 20%, #254779 78%, #355d98);
+  color: white;
+}
+.topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.topline a {
+  color: #d6e6ff;
+  text-decoration: none;
+  font-size: 13px;
+}
+.topline button {
+  border: 1px solid #ffffff4f;
+  background: #ffffff0e;
+  color: white;
+  font-size: 12px;
+}
+.reference {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #c6dbfb;
+  font-size: 12px;
+  letter-spacing: 0.055em;
+}
+.cover h1 {
+  margin: 8px 0 14px;
+  font-size: clamp(29px, 3vw, 44px);
+  font-weight: 610;
+  letter-spacing: -0.048em;
+}
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.tags > span {
+  border-radius: 20px;
+  font-size: 12px;
+  text-transform: capitalize;
+  padding: 3px 10px;
+  background: #ffffff16;
+  color: #e5efff;
+  border: 1px solid #ffffff38;
+}
+.tabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid #d5dfe9;
+  overflow: auto;
+}
+.tabs a {
+  padding: 10px 13px;
+  border-bottom: 3px solid transparent;
+  text-decoration: none;
+  color: #546981;
+  font-weight: 600;
+}
+.tabs a[aria-current] {
+  border-color: #3568c6;
+  color: #214d9b;
+}
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(190px, 25%);
+  gap: 18px;
+  align-items: start;
+}
+.content {
+  display: grid;
+  min-width: 0;
+  gap: 14px;
+}
+.content > section,
+.inspector {
+  border: 1px solid #dce3ed;
+  background: white;
+  border-radius: 11px;
+  padding: 20px;
+  min-width: 0;
+}
+.file h2 {
+  font-size: 18px;
+  letter-spacing: -0.03em;
+  margin: 0 0 12px;
+}
+.file p {
+  color: #4b6078;
+}
+.inspector dl {
+  display: grid;
+  margin: 0;
+}
+.inspector dt {
+  font-size: 12px;
+  color: #60758d;
+}
+.inspector dd {
+  margin: 2px 0 12px;
+  color: #213c59;
+  overflow-wrap: anywhere;
+}
+.inspector dd:last-child {
+  margin-bottom: 0;
+}
+.stage,
+.inspector dd:first-letter {
+  text-transform: capitalize;
+}
+.actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.actions a {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  background: #edf3ff;
+  border-radius: 7px;
+  padding: 9px 12px;
+  text-decoration: none;
+  color: #2855a4;
+  font-weight: 600;
+}
+.content pre {
+  overflow: auto;
+  max-width: 100%;
+}
+.content details > summary {
+  cursor: pointer;
+}
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+  .inspector dl {
+    grid-template-columns: auto 1fr;
+    gap: 5px 14px;
+  }
+  .inspector dd {
+    margin: 0;
+  }
+}
+@media (max-width: 510px) {
+  .tabs {
+    gap: 0;
+  }
+  .tabs a {
+    padding-inline: 8px;
+    font-size: 12px;
+  }
+}

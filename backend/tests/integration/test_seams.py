@@ -109,7 +109,13 @@ def local_settings() -> Settings:
     on top of explicit repository filters (AGENTS.md §3 R1) — it does
     not gate the seam-inventory contract being verified here.
     """
-    return Settings(app_env="local", tenant_listener_enabled=False)
+    return Settings(
+        app_env="local",
+        tenant_listener_enabled=False,
+        outbox_dispatcher_enabled=False,
+        webhook_dispatcher_enabled=False,
+        sla_scanner_enabled=False,
+    )
 
 
 @pytest.fixture
@@ -251,6 +257,7 @@ def test_startup_log_includes_all_eight_local_adapters(
     local_settings: Settings,
     create_app_factory,
     capsys,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The startup event logs the local adapter name for every one of the 8 seams.
 
@@ -259,6 +266,13 @@ def test_startup_log_includes_all_eight_local_adapters(
     """
     import json  # noqa: PLC0415
     import re  # noqa: PLC0415
+
+    async def _skip_identity_loading(_sessionmaker: object) -> None:
+        # This test checks adapter logging; identity hydration has its own
+        # SQLite integration test and should not require a migrated DB here.
+        return None
+
+    monkeypatch.setattr("app.main._hydrate_local_identity_registry", _skip_identity_loading)
 
     get_settings.__globals__["_settings"] = local_settings
     with warnings.catch_warnings():

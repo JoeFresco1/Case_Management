@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
-from typing import Protocol, cast
+from typing import Annotated, Protocol, cast
 from uuid import UUID
 
 from fastapi import Depends, Header, HTTPException, Request, status
@@ -85,10 +85,19 @@ class LocalHeaderIdentityProvider:
 
 # Seeded local dev identities. Real production swaps this for an Entra-backed provider.
 _LOCAL_USERS: dict[str, UserContext] = {}
+_LOCAL_USER_KEYS: dict[tuple[str, str], UserContext] = {}
 
 
-def register_local_user(ctx: UserContext) -> None:
+def register_local_user(ctx: UserContext, *, key: str | None = None) -> None:
+    """Register a persisted local identity by UUID and optional tenant user key.
+
+    UUID headers remain globally unambiguous. Seeded user keys are indexed
+    with their tenant so equal keys in different tenants cannot select the
+    wrong identity.
+    """
     _LOCAL_USERS[str(ctx.user_id)] = ctx
+    if key:
+        _LOCAL_USER_KEYS[(key, str(ctx.tenant_id))] = ctx
 
 
 def clear_local_users() -> None:
@@ -97,11 +106,13 @@ def clear_local_users() -> None:
     Used by test fixtures to ensure test isolation between test runs.
     """
     _LOCAL_USERS.clear()
+    _LOCAL_USER_KEYS.clear()
 
 
 def get_current_user(
     settings: Settings = Depends(get_settings),  # noqa: B008
     x_dev_user: str | None = Header(default=None, alias="x-dev-user"),
+    x_dev_tenant: Annotated[str | None, Header(alias="x-dev-tenant")] = None,
 ) -> UserContext:
     if not settings.is_local():
         # Fail-closed: dev-header identity must never be honored outside local.
@@ -114,11 +125,40 @@ def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="missing X-Dev-User header",
         )
-    ctx = _LOCAL_USERS.get(x_dev_user)
+    user_key = x_dev_user.strip()
+    requested_tenant: str | None = None
+    if x_dev_tenant:
+        try:
+            requested_tenant = str(UUID(x_dev_tenant.strip()))
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="invalid X-Dev-Tenant header",
+            ) from exc
+
+    # UUIDs are the stable identity and retain the legacy header contract.
+    # Human-readable keys are tenant-scoped to avoid cross-tenant ambiguity.
+    ctx = _LOCAL_USERS.get(user_key)
+    if ctx is None:
+        if requested_tenant is not None:
+            ctx = _LOCAL_USER_KEYS.get((user_key, requested_tenant))
+        else:
+            matches = [
+                registered
+                for (key, _tenant_id), registered in _LOCAL_USER_KEYS.items()
+                if key == user_key
+            ]
+            if len(matches) == 1:
+                ctx = matches[0]
     if ctx is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"unknown dev user: {x_dev_user}",
+            detail=f"unknown or ambiguous dev user: {user_key}",
+        )
+    if requested_tenant is not None and requested_tenant != str(ctx.tenant_id):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="X-Dev-Tenant does not match the registered dev user",
         )
     # why: bind actor + tenant into the structlog contextvars so every
     # log line emitted during the request (including from application/

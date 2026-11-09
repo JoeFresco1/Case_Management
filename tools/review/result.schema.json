@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://case-management.local/review/result.schema.json",
+  "title": "Repository review worker result",
+  "description": "One deterministic result artifact from one review worker for one immutable Git snapshot.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "snapshot_commit", "worker_id", "findings", "coverage"],
+  "properties": {
+    "schema_version": {"type": "integer", "enum": [1]},
+    "snapshot_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "worker_id": {"type": "string", "minLength": 1, "maxLength": 100, "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"},
+    "findings": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/finding"}
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["files", "edges", "subsystems", "flows"],
+      "properties": {
+        "files": {"type": "array", "items": {"$ref": "#/$defs/fileCoverage"}},
+        "edges": {"type": "array", "items": {"$ref": "#/$defs/keyCoverage"}},
+        "subsystems": {"type": "array", "items": {"$ref": "#/$defs/keyCoverage"}},
+        "flows": {"type": "array", "items": {"$ref": "#/$defs/keyCoverage"}}
+      }
+    }
+  },
+  "$defs": {
+    "coverageStatus": {"enum": ["reviewed", "partial", "blocked", "not_applicable"]},
+    "coverageNote": {"type": "string", "maxLength": 2000},
+    "fileCoverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "status", "note"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "status": {"$ref": "#/$defs/coverageStatus"},
+        "note": {"$ref": "#/$defs/coverageNote"}
+      }
+    },
+    "keyCoverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "status", "note"],
+      "properties": {
+        "key": {"type": "string", "minLength": 1, "maxLength": 300},
+        "status": {"$ref": "#/$defs/coverageStatus"},
+        "note": {"$ref": "#/$defs/coverageNote"}
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["finding_id", "rule_id", "severity", "title", "detail", "location", "evidence", "verifier_status", "verifier_note", "duplicate_of"],
+      "properties": {
+        "finding_id": {"type": "string", "pattern": "^F-[0-9a-f]{24}$"},
+        "rule_id": {"type": "string", "minLength": 1, "maxLength": 120},
+        "severity": {"enum": ["critical", "high", "medium", "low", "info"]},
+        "title": {"type": "string", "minLength": 1, "maxLength": 300},
+        "detail": {"type": "string", "minLength": 1, "maxLength": 10000},
+        "location": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "line_start", "line_end"],
+          "properties": {
+            "path": {"type": "string", "minLength": 1},
+            "line_start": {"type": "integer", "minimum": 1},
+            "line_end": {"type": ["integer", "null"], "minimum": 1}
+          }
+        },
+        "evidence": {"type": "array", "items": {"type": "string", "maxLength": 2000}},
+        "verifier_status": {"enum": ["unverified", "confirmed", "rejected", "needs_context"]},
+        "verifier_note": {"type": "string", "maxLength": 4000},
+        "duplicate_of": {"type": ["string", "null"], "pattern": "^F-[0-9a-f]{24}$"}
+      }
+    }
+  }
+}

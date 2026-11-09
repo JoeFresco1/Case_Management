@@ -327,7 +327,31 @@ def test_query_shape__sensitive_filter_value__becomes_ref_marker() -> None:
             "value": {"redacted": True, "reason": "sensitive", "ref": "ssn"},
         }
     ]
+    assert shape["text_query"] is None
     assert "123-45-6789" not in str(shape)
+
+
+def test_query_shape__free_text_and_filter_values__are_redacted() -> None:
+    # given: free text and a searchable filter value that contain private content
+    text_value = "name@example.test"
+    filter_value = "internal note with private details"
+    query = _query(
+        text_query=text_value,
+        filters=(QueryFilter(field="status", op="eq", value=filter_value),),
+    )
+    # when: the audit shape is built
+    shape = query_shape_for_audit(query)
+    # then: it preserves query structure but never includes raw search operands
+    assert shape["text_query"] == {"redacted": True, "reason": "free_text"}
+    assert shape["filters"] == [
+        {
+            "field": "status",
+            "op": "eq",
+            "value": {"redacted": True, "reason": "query_value"},
+        }
+    ]
+    assert text_value not in str(shape)
+    assert filter_value not in str(shape)
 
 
 def test_build_audit_event__carries_shape_count_and_actors() -> None:
@@ -342,7 +366,13 @@ def test_build_audit_event__carries_shape_count_and_actors() -> None:
     assert event.saved_search_id is None
     assert event.result_count == 3
     assert event.occurred_at == FIXED_NOW
-    assert event.query_shape["filters"] == [{"field": "status", "op": "eq", "value": "open"}]
+    assert event.query_shape["filters"] == [
+        {
+            "field": "status",
+            "op": "eq",
+            "value": {"redacted": True, "reason": "query_value"},
+        }
+    ]
 
 
 def test_build_audit_event__saved_search_id__recorded() -> None:

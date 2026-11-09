@@ -1,4 +1,4 @@
-import { useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import { DocumentViewer } from "./DocumentViewer";
 
@@ -12,11 +12,18 @@ import { DocumentViewer } from "./DocumentViewer";
 export function DocumentViewerPage() {
   const params = useParams<{ documentId?: string }>();
   const documentId = params.documentId;
+  const [search] = useSearchParams();
+  const caseId = search.get("caseId");
   if (!documentId) {
     return <p>Missing document id.</p>;
   }
   return (
     <article>
+      {caseId && (
+        <Link to={`/cases/${encodeURIComponent(caseId)}?view=documents`}>
+          Back to case documents
+        </Link>
+      )}
       <h1>Document viewer</h1>
       <DocumentViewer documentId={documentId} />
     </article>

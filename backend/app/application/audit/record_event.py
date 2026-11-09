@@ -32,7 +32,8 @@ the P09-US2 / I2 acceptance scenario.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import inspect
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Final
@@ -51,9 +52,9 @@ from app.domain.ports import AuditEventStore
 
 # A ``Dedupe`` callable that returns True iff a prior row with the same
 # idempotency key already exists in this session/transaction. The
-# application layer is implementation-agnostic; the production
-# adapter (and the in-memory test fake) supply the lookup.
-Dedupe = Callable[[UUID, str, str, str], bool]
+# application layer is implementation-agnostic; synchronous test fakes
+# and asynchronous persistence adapters may both supply the lookup.
+Dedupe = Callable[[UUID, str, str, str], bool | Awaitable[bool]]
 
 
 # Sentinel returned by ``record_event`` on a silent idempotent replay.
@@ -156,7 +157,14 @@ async def record_event(
     """
     _validate_command(cmd)
     phash = payload_hash(cmd.payload)
-    if dedupe(cmd.tenant_id, cmd.event_type, cmd.correlation_id, phash):
+    duplicate_check = dedupe(cmd.tenant_id, cmd.event_type, cmd.correlation_id, phash)
+    if inspect.isawaitable(duplicate_check):
+        # why: the SQL adapter must finish its tenant-scoped lookup before
+        # deciding whether the first event should be appended.
+        is_duplicate = await duplicate_check
+    else:
+        is_duplicate = duplicate_check
+    if is_duplicate:
         # Same key + same payload hash -> silent no-op (idempotent
         # replay; AGENTS.md §10). We do NOT raise; the caller's
         # domain change already committed once and we are guarding

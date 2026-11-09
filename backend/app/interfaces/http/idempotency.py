@@ -10,6 +10,7 @@ import base64
 import hashlib
 import inspect
 import json
+import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import cast
@@ -27,6 +28,18 @@ from app.domain.context import UserContext
 from app.domain.errors import DependencyUnavailable
 
 HEADER = "idempotency-key"
+_MUTATING_METHODS = frozenset({"POST", "PATCH", "PUT", "DELETE"})
+_POSTS_WITHOUT_MUTATION_IDEMPOTENCY = frozenset(
+    {
+        "/api/v1/search",
+        "/api/v1/search/semantic",
+        "/api/v1/bundles/links/redeem",
+    }
+)
+_READ_ONLY_POST_PATTERNS = (
+    re.compile(r"/api/v1/search/saved/[^/]+/run"),
+    re.compile(r"/api/v1/admin/workflows/[^/]+/versions/[^/]+/simulate"),
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,6 +82,20 @@ def _error(request: Request, status: int, code: str, message: str) -> JSONRespon
     )
 
 
+def _is_post_without_idempotency(method: str, path: str) -> bool:
+    """Identify read-only POSTs and the bearer-token redemption route.
+
+    Search and workflow simulation are query operations despite using POST
+    bodies. Bearer redemption authenticates with its token inside the route,
+    so the middleware must not impose a user identity on that exact path.
+    """
+    if method != "POST":
+        return False
+    return path in _POSTS_WITHOUT_MUTATION_IDEMPOTENCY or any(
+        pattern.fullmatch(path) is not None for pattern in _READ_ONLY_POST_PATTERNS
+    )
+
+
 class IdempotencyMiddleware(BaseHTTPMiddleware):
     """Reserve and finalize a mutation in the same transaction as its effects."""
 
@@ -78,18 +105,17 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
         self._scope_paths = ("/api/v1",) if scope_paths is None else scope_paths
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
-        """Run read requests normally and protect keyed mutations before dispatch."""
-        if request.method in ("GET", "HEAD", "OPTIONS") or not any(
-            request.url.path.startswith(path) for path in self._scope_paths
+        """Run reads normally and protect every in-scope mutation before dispatch."""
+        path = request.url.path.rstrip("/")
+        if (
+            request.method not in _MUTATING_METHODS
+            or not any(request.url.path.startswith(scope) for scope in self._scope_paths)
+            or _is_post_without_idempotency(request.method, path)
         ):
             return await call_next(request)
         key = request.headers.get(HEADER, "").strip()
         if not key:
-            if request.method == "POST":
-                return _error(
-                    request, 400, "validation_failed", "Idempotency-Key header is required"
-                )
-            return await call_next(request)
+            return _error(request, 400, "validation_failed", "Idempotency-Key header is required")
         if len(key) > 128:
             return _error(request, 400, "validation_failed", "Idempotency-Key is too long")
         return await self._handle_authenticated(request, call_next, key)

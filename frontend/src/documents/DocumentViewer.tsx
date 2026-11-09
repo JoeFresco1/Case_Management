@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
 import { api, isForbiddenLike } from "../api/client";
+import { ContentPreview } from "./ContentPreview";
 import { AnnotationLayer } from "./AnnotationLayer";
 import { CheckoutIndicator } from "./CheckoutIndicator";
 import { RevisionHistory } from "./RevisionHistory";
@@ -34,7 +35,9 @@ const MODES: ViewerMode[] = ["paged", "thumbnail", "detail"];
 export function DocumentViewer({ documentId }: { documentId: string }) {
   const [mode, setMode] = useState<ViewerMode>("paged");
   const [page, setPage] = useState(1);
-  const [versionFilter, setVersionFilter] = useState<number | undefined>(undefined);
+  const [versionFilter, setVersionFilter] = useState<number | undefined>(
+    undefined,
+  );
 
   const versionsQuery = useQuery({
     queryKey: documentQueryKeys.versions(documentId),
@@ -49,7 +52,13 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
     // two observers into one fetch, truncating the page strip to the
     // layer's current slice. The counts query always reads up to 200
     // marks so the thumbnail strip covers every annotated page.
-    queryKey: ["documents", documentId, "annotations", versionFilter ?? "all", "counts"],
+    queryKey: [
+      "documents",
+      documentId,
+      "annotations",
+      versionFilter ?? "all",
+      "counts",
+    ],
     queryFn: () =>
       api.viewer.listAnnotations(documentId, {
         document_version: versionFilter,
@@ -87,21 +96,48 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
   }
 
   const versions = versionsQuery.data ?? [];
-  const selectedVersion = versionFilter ?? versions[versions.length - 1]?.version_number;
+  const current = versions.reduce<(typeof versions)[number] | undefined>(
+    (latest, version) =>
+      !latest || version.version_number > latest.version_number
+        ? version
+        : latest,
+    undefined,
+  );
+  const selected =
+    versions.find((version) => version.version_number === versionFilter) ??
+    current;
 
-  const clampPage = (next: number) => setPage(Math.min(Math.max(1, next), pageCount));
+  const clampPage = (next: number) =>
+    setPage(Math.min(Math.max(1, next), pageCount));
 
   return (
     <section className={styles.viewer} aria-label="Document viewer">
+      <header className={styles.viewerHeader}>
+        <div>
+          <h2>Document review</h2>
+          {current && (
+            <span className={styles.meta}>
+              Current version {current.version_number} · {current.content_type}
+            </span>
+          )}
+        </div>
+      </header>
       <div className={styles.modeSwitch} role="group" aria-label="Viewer mode">
         {MODES.map((name) => (
           <button
             key={name}
             type="button"
             aria-pressed={mode === name}
+            aria-label={name}
             onClick={() => setMode(name)}
           >
-            {name}
+            {
+              {
+                paged: "Review",
+                thumbnail: "Annotation pages",
+                detail: "File history",
+              }[name]
+            }
           </button>
         ))}
       </div>
@@ -115,38 +151,66 @@ export function DocumentViewer({ documentId }: { documentId: string }) {
       ) : (
         <div className={styles.detail}>
           <label>
-            Version
+            Annotation version
             <select
               value={versionFilter === undefined ? "" : String(versionFilter)}
               onChange={(event) =>
                 setVersionFilter(
-                  event.target.value === "" ? undefined : Number(event.target.value),
+                  event.target.value === ""
+                    ? undefined
+                    : Number(event.target.value),
                 )
               }
               aria-label="Annotation version filter"
             >
               <option value="">All versions</option>
               {versions.map((version) => (
-                <option key={version.version_number} value={version.version_number}>
+                <option
+                  key={version.version_number}
+                  value={version.version_number}
+                >
                   v{version.version_number} — {version.sha256.slice(0, 8)}
                 </option>
               ))}
             </select>
           </label>
           <div className={styles.meta}>
-            {versions.length} version(s)
-            {selectedVersion !== undefined && ` · viewing v${selectedVersion}`}
+            {selected && (
+              <>
+                Version {selected.version_number} ·{" "}
+                {selected.size.toLocaleString()} bytes
+                {selected.uploaded_at && (
+                  <>
+                    {" "}
+                    · Filed{" "}
+                    {new Date(selected.uploaded_at).toLocaleDateString()}
+                  </>
+                )}
+              </>
+            )}
           </div>
           <div className={styles.inlineRow}>
-            <a href={api.viewer.contentUrl(documentId, "original")}>Download original</a>
-            <a href={api.viewer.contentUrl(documentId, "redacted")}>Download redacted</a>
+            <a href={api.viewer.contentUrl(documentId, "original")}>
+              Download current original
+            </a>
+            <a href={api.viewer.contentUrl(documentId, "redacted")}>
+              Download redacted copy
+            </a>
           </div>
         </div>
       )}
 
+      {mode === "paged" && current && (
+        <ContentPreview
+          key={documentId + current.version_number}
+          documentId={documentId}
+          size={current.size}
+          type={current.content_type}
+        />
+      )}
       {(mode === "paged" || mode === "thumbnail") && (
         <div>
-          <h3>{mode === "paged" ? "Pages" : "Thumbnails"}</h3>
+          <h3>Annotation pages</h3>
           <ul className={styles.pageStrip}>
             {Array.from({ length: pageCount }, (_, index) => index + 1).map(
               (pageNumber) => (

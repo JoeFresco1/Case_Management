@@ -75,7 +75,7 @@ def make_catalog_subscriber(
                     audit=audit,
                     clock=clock,
                 )
-            except Exception:  # noqa: BLE001 — enqueue must not break the bus
+            except Exception:  # noqa: BLE001 — let the outbox retry failed enqueues
                 logger.exception(
                     "outbound_webhook.enqueue_failed",
                     extra={
@@ -84,7 +84,10 @@ def make_catalog_subscriber(
                         "event_type": event_type,
                     },
                 )
-                continue
+                # The outbox is the only durable retry source before a
+                # delivery row exists. Propagate enqueue failures so its
+                # dispatcher leaves this event pending instead of acking it.
+                raise
             if not created:
                 # A prior delivery exists; the dispatcher loop
                 # owns its retry policy. We do not re-dispatch

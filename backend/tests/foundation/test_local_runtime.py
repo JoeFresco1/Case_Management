@@ -21,6 +21,8 @@ header-IdP tests start failing immediately.
 
 from __future__ import annotations
 
+import warnings
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
@@ -36,6 +38,8 @@ from app.deps import (
     get_current_user,
     register_local_user,
 )
+from app.infrastructure.persistence.models import Tenant
+from app.infrastructure.persistence.models import User as UserRow
 from app.interfaces.http.routers.health import router as health_router
 
 # ---------------------------------------------------------------------------
@@ -285,6 +289,80 @@ def test_get_current_user__returns_user_in_local_env(
         x_dev_user="00000000-0000-0000-0000-000000000001",
     )
     assert resolved.user_id == UUID("00000000-0000-0000-0000-000000000001")
+
+
+def test_get_current_user__resolves_seed_key_and_checks_tenant() -> None:
+    """Seed keys resolve only to their registered tenant identity."""
+    ctx = _build_user_context()
+    register_local_user(ctx, key="intake")
+
+    resolved = get_current_user(
+        settings=Settings(app_env="local"),
+        x_dev_user="intake",
+        x_dev_tenant=str(ctx.tenant_id),
+    )
+    assert resolved.user_id == ctx.user_id
+
+    with pytest.raises(HTTPException) as excinfo:
+        get_current_user(
+            settings=Settings(app_env="local"),
+            x_dev_user="intake",
+            x_dev_tenant="22222222-2222-2222-2222-222222222222",
+        )
+    assert excinfo.value.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_local_identity_hydration__restores_persisted_seed_aliases(
+    sql_session_factory: Any,
+) -> None:
+    """A server process rebuilds local identities from persisted user rows."""
+    # FastAPI currently warns while main.py constructs the application at import.
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        from app.main import _hydrate_local_identity_registry  # noqa: PLC0415
+
+    tenant_id = UUID("11111111-1111-1111-1111-111111111111")
+    user_id = UUID("00000000-0000-0000-0000-000000000123")
+    now = datetime.now(tz=UTC)
+    async with sql_session_factory() as session:
+        session.add(
+            Tenant(
+                id=tenant_id,
+                key="acme",
+                name="Acme Synthetic Co.",
+                created_at=now,
+            )
+        )
+        session.add(
+            UserRow(
+                id=user_id,
+                tenant_id=tenant_id,
+                key="process_admin",
+                display_name="Pat Process Admin",
+                roles=["process_admin"],
+                is_system=False,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        await session.commit()
+
+    await _hydrate_local_identity_registry(sql_session_factory)
+
+    resolved_by_key = get_current_user(
+        settings=Settings(app_env="local"),
+        x_dev_user="process_admin",
+        x_dev_tenant=str(tenant_id),
+    )
+    resolved_by_id = get_current_user(
+        settings=Settings(app_env="local"),
+        x_dev_user=str(user_id),
+        x_dev_tenant=str(tenant_id),
+    )
+    assert resolved_by_key.user_id == user_id
+    assert resolved_by_id.user_id == user_id
+    assert resolved_by_key.roles == ("process_admin",)
 
 
 # ---------------------------------------------------------------------------

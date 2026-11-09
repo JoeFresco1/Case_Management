@@ -85,6 +85,7 @@ ralph/PRD.json.old
 *.tmp
 
 # Agent/tool working artifacts (never commit)
+.review/
 .codex-remote-attachments/
 .codegraph/
 .impeccable/

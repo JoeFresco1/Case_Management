@@ -123,12 +123,12 @@ class CaseRepository(TenantScoped, Protocol):
         queue_keys: tuple[str, ...],
         limit: int = 200,
     ) -> Sequence[Case]:
-        """Return open cases whose owner queue is in ``queue_keys``.
+        """Return open cases with an open task assigned to one of ``queue_keys``.
 
         P12-US1 / FM-051: the operational reports scope open cases to
         the supervisor's team queues. Implementations MUST include
         ``WHERE tenant_id = :tenant_id`` and MUST restrict to
-        ``status = 'open'`` and ``owner_queue_id IN :queue_keys``.
+        open cases with a same-tenant open task in the supplied queue keys.
         Cross-tenant queue keys are silently dropped (the queue is
         invisible from this tenant). Order: ``updated_at DESC`` so
         the supervisor sees the freshest work first.

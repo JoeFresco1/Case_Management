@@ -42,6 +42,7 @@ from app.infrastructure.persistence.repositories import SqlCaseTypeRepository
 from app.interfaces.http.errors import domain_error_handler
 from app.interfaces.http.routers.admin_case_types import router as case_types_router
 from app.interfaces.http.routers.admin_governance import router as governance_router
+from tests._live_roles import seed_live_roles
 
 TENANT_ID = UUID("11111111-1111-1111-1111-111111111111")
 ADMIN_A = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
@@ -74,6 +75,15 @@ async def _seed_case_type(session_factory: async_sessionmaker[AsyncSession]) -> 
 
 
 def _build_app(session_factory: async_sessionmaker[AsyncSession], clock: Any) -> FastAPI:
+    _run(
+        seed_live_roles(
+            session_factory,
+            tenant_id=TENANT_ID,
+            user_id=ADMIN_A,
+            role_names=("process_admin",),
+        )
+    )
+
     async def _override_get_db() -> Any:
         async with session_factory() as session:
             try:

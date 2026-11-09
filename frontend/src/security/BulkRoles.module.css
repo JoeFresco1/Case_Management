@@ -1,0 +1,145 @@
+.page {
+  color: #192b44;
+  max-width: 58rem;
+}
+.page h1 {
+  font-size: clamp(1.8rem, 3vw, 2.35rem);
+  line-height: 1.15;
+  letter-spacing: -0.045em;
+  margin: 0 0 1.45rem;
+}
+.panel {
+  background: #fff;
+  border: 1px solid #d8e1ea;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.panel header {
+  padding: 1.2rem 1.4rem;
+  border-bottom: 1px solid #e1e7ee;
+}
+.panel h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+.panel header p {
+  margin: 0.35rem 0 0;
+  color: #52647b;
+}
+.inputs {
+  padding: 1.2rem 1.4rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+.inputs label {
+  display: grid;
+  gap: 0.35rem;
+  color: #41556d;
+  font-weight: 650;
+}
+.inputs select,
+.inputs textarea {
+  border: 1px solid #bdcad7;
+  border-radius: 6px;
+  padding: 0.6rem 0.75rem;
+  color: #162d48;
+  background: white;
+  min-width: 0;
+}
+.inputs textarea {
+  resize: vertical;
+  font-family: ui-monospace, monospace;
+}
+.users,
+.help {
+  grid-column: 1/-1;
+}
+.help {
+  margin: -0.55rem 0 0;
+  font-size: 0.85rem;
+  color: #52647b;
+}
+.panel > .help,
+.error {
+  padding: 0 1.4rem 0.5rem;
+}
+.error,
+.panel small {
+  color: #9a3027;
+  overflow-wrap: anywhere;
+}
+.footer {
+  border-top: 1px solid #e1e7ee;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 1.05rem 1.4rem;
+}
+.footer p {
+  margin: 0 auto 0 0;
+}
+.footer button {
+  padding: 0.55rem 0.9rem;
+  border-radius: 6px;
+  border: 1px solid #215695;
+  background: #215695;
+  color: white;
+  cursor: pointer;
+  font-weight: 650;
+}
+.footer .secondary {
+  background: white;
+  color: #214d7e;
+  border-color: #bacbdb;
+}
+.footer button:disabled {
+  background: #f0f3f7;
+  color: #61738a;
+  cursor: default;
+  border-color: #d8e1ea;
+}
+.scroll {
+  overflow: auto;
+  max-height: 30rem;
+}
+.panel table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.panel th,
+.panel td {
+  text-align: left;
+  padding: 0.7rem 1.4rem;
+  border-bottom: 1px solid #e5eaf0;
+}
+.panel th {
+  background: #f4f7fa;
+  color: #40576f;
+  font-size: 0.8rem;
+  position: sticky;
+  top: 0;
+}
+.panel small {
+  display: block;
+  margin-top: 0.35rem;
+}
+.pill {
+  border-radius: 20px;
+  padding: 0.15rem 0.55rem;
+  background: #edf1f6;
+}
+.pill[data-state="Failed"] {
+  color: #9a3027;
+  background: #fcebe8;
+}
+.pill[data-state="Applied"] {
+  color: #216543;
+  background: #e6f2ec;
+}
+@media (max-width: 550px) {
+  .inputs {
+    grid-template-columns: 1fr;
+  }
+}
